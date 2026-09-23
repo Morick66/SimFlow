@@ -44,11 +44,14 @@ dotnet build SimFlow.csproj -c Release -p:Platform=x64 --no-restore
 
 ## 5. 打包和签名
 
-- [ ] 从发布提交构建 x64 Sideload MSIX
-- [ ] `Get-AuthenticodeSignature` 为 `Valid`
-- [ ] ZIP、MSIX、CER 写入 `SHA256SUMS.txt`
-- [ ] ZIP 内外 MSIX/CER 完全一致
+- [ ] Store 包已关联 Partner Center 分配的真实应用身份
+- [ ] 已生成 x64 `.msixupload` 并通过 Windows App Certification Kit
+- [ ] GitHub 独立包来自同一公开提交和可追溯自动化构建
+- [ ] GitHub 独立包已由 SignPath Foundation 或其他公共可信服务签名
+- [ ] `Get-AuthenticodeSignature` 为 `Valid`，且签名链无需用户导入开发证书
+- [ ] ZIP、MSIX 写入 `SHA256SUMS.txt`，包内外文件完全一致
 - [ ] 发布目录包含安装、升级、卸载和回滚说明
+- [ ] 未上传开发 CER、PFX 或自签二进制
 
 ## 6. 安装验收
 

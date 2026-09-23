@@ -1,6 +1,6 @@
 # SimFlow 安装、升级与卸载
 
-> 当前没有官方公开二进制。先前的个人身份自签版本已经撤回。以下内容仅用于后续重新签名版本的安装说明，不要继续使用旧的 MSIX/CER。
+> 当前没有官方公开二进制。先前的个人身份自签版本已经撤回。以下内容仅用于后续 Microsoft Store 正式版本；不要继续使用旧的 MSIX/CER。
 
 ## 系统要求
 
@@ -17,11 +17,11 @@ Get-FileHash .\SimFlow_1.0.5.0_x64.msix -Algorithm SHA256
 Get-AuthenticodeSignature .\SimFlow_1.0.5.0_x64.msix
 ```
 
-签名状态应为 `Valid`。正式恢复发布后，以对应 Release 的签名与校验说明为准。
+签名状态应为 `Valid`。正式恢复发布后，以 Microsoft Store 页面和对应版本说明为准，不需要用户手动导入开发证书。
 
 ## 安装
 
-正式恢复发布后，推荐按对应 Release 的说明安装完整分发包。
+正式恢复发布后，推荐从 Microsoft Store 安装和更新。
 
 不要从源码目录、未知网盘或第三方重新打包文件安装。
 

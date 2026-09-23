@@ -8,7 +8,7 @@ SimFlow 是面向个人 CAE 仿真工程师的 Windows 原生项目管理工具�
 - 平台：Windows 10 2004+ / Windows 11，x64
 - 技术栈：.NET 10、WinUI 3、Windows App SDK 2.4、SQLite
 - 数据库结构：Schema 3
-- 状态：源码和数据保留验收已完成；公开二进制正在更换发布身份与签名方案
+- 状态：源码和数据保留验收已完成；公开二进制正在建立 Store + GitHub 双通道可信签名流程
 
 ## 主要能力
 
@@ -44,6 +44,9 @@ dotnet build SimFlow.csproj -c Release -p:Platform=x64 --no-restore
 - [已知问题](docs/KNOWN_ISSUES.md)
 - [发布检查清单](docs/RELEASE_CHECKLIST.md)
 - [1.0.5.0 发布说明与验证记录](docs/RELEASE_NOTES_1.0.5.0.md)
+- [发布与签名策略](docs/DISTRIBUTION_AND_SIGNING.md)
+- [代码签名政策](docs/CODE_SIGNING_POLICY.md)
+- [隐私政策](PRIVACY.md)
 - [产品需求与技术设计](docs/SimFlow%20个人版产品需求与技术设计文档.md)
 - [项目目录结构规范](docs/SimFlow%20项目目录结构规范.md)
 - [项目规划与进度](docs/SimFlow%20项目规划与进度.md)
@@ -54,6 +57,6 @@ dotnet build SimFlow.csproj -c Release -p:Platform=x64 --no-restore
 
 ## 分发说明
 
-当前没有官方公开二进制。先前使用个人身份自签证书的 `1.0.5.0` 安装包已撤回，不应继续分发或安装。新的公开安装包将在使用中性发布身份和合适的签名渠道后重新发布。
+当前没有官方公开二进制。先前使用个人身份自签证书的 `1.0.5.0` 安装包已撤回，不应继续分发或安装。后续同时提供 Microsoft Store 渠道和 GitHub Releases 独立下载渠道；GitHub 二进制只在获得公共可信签名后发布。
 
-项目许可证将在公开仓库发布前确定。在许可证文件加入前，代码公开可见不代表授予复制、修改或再分发权利。
+项目采用 [MIT License](LICENSE) 开源。

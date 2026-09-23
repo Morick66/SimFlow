@@ -1,0 +1,14 @@
+{
+  "profiles": {
+    "SimFlow (Package)": {
+      "commandName": "MsixPackage"
+    },
+    "SimFlow (Unpackaged)": {
+      "commandName": "Project",
+      "environmentVariables": {
+        "SIMFLOW_DATA_HOME": "D:\\SimFlowData\\Development",
+        "SIMFLOW_SEED_DEMO": "1"
+      }
+    }
+  }
+}

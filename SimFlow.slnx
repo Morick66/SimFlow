@@ -1,0 +1,11 @@
+<Solution>
+  <Configurations>
+    <Platform Name="x64" />
+  </Configurations>
+  <Project Path="SimFlow.csproj">
+    <Platform Solution="*|x64" Project="x64" />
+    <Deploy />
+  </Project>
+  <Project Path="Core\SimFlow.Core.csproj" />
+  <Project Path="Tests\SimFlow.Tests\SimFlow.Tests.csproj" />
+</Solution>

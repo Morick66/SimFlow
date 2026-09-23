@@ -1,0 +1,45 @@
+name: Windows CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-test-portable:
+    runs-on: windows-latest
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+
+      - name: Set up .NET SDK
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.401
+
+      - name: Restore locked dependencies
+        run: dotnet restore SimFlow.slnx --locked-mode
+
+      - name: Run automated tests
+        run: dotnet test SimFlow.slnx -c Release --no-restore
+
+      - name: Check known vulnerable packages
+        run: dotnet list SimFlow.slnx package --vulnerable --include-transitive --no-restore
+
+      - name: Build unsigned portable candidate
+        run: dotnet publish SimFlow.csproj -c Release --no-restore -p:Platform=x64 -p:PublishProfile=win-x64-portable
+
+      - name: Upload unsigned development artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: SimFlow-portable-x64-unsigned-${{ github.sha }}
+          path: bin/Release/net10.0-windows10.0.19041.0/win-x64/portable/
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 6

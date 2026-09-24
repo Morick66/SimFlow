@@ -10,7 +10,7 @@
   <Identity
     Name="b54e2351-7821-4912-8e66-46f886f0d61b"
     Publisher="CN=SimFlow Development"
-    Version="1.0.5.0" />
+    Version="1.0.6.0" />
 
   <mp:PhoneIdentity PhoneProductId="b54e2351-7821-4912-8e66-46f886f0d61b" PhonePublisherId="00000000-0000-0000-0000-000000000000"/>
 

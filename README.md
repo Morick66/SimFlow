@@ -4,11 +4,11 @@ SimFlow 是面向个人 CAE 仿真工程师的 Windows 原生项目管理工具�
 
 ## 当前版本
 
-- 源码里程碑：`1.0.5.0`
+- 当前版本：`1.0.6.0`
 - 平台：Windows 10 2004+ / Windows 11，x64
 - 技术栈：.NET 10、WinUI 3、Windows App SDK 2.4、SQLite
 - 数据库结构：Schema 3
-- 状态：源码和数据保留验收已完成；公开二进制正在建立 Store + GitHub 双通道可信签名流程
+- 状态：源码和数据保留验收已完成；GitHub Releases 提供免安装便携版
 
 ## 主要能力
 
@@ -44,6 +44,7 @@ dotnet build SimFlow.csproj -c Release -p:Platform=x64 --no-restore
 - [已知问题](docs/KNOWN_ISSUES.md)
 - [发布检查清单](docs/RELEASE_CHECKLIST.md)
 - [1.0.5.0 发布说明与验证记录](docs/RELEASE_NOTES_1.0.5.0.md)
+- [1.0.6.0 发布说明](docs/RELEASE_NOTES_1.0.6.0.md)
 - [发布与签名策略](docs/DISTRIBUTION_AND_SIGNING.md)
 - [代码签名政策](docs/CODE_SIGNING_POLICY.md)
 - [隐私政策](PRIVACY.md)
@@ -57,6 +58,8 @@ dotnet build SimFlow.csproj -c Release -p:Platform=x64 --no-restore
 
 ## 分发说明
 
-当前没有官方公开二进制。先前使用个人身份自签证书的 `1.0.5.0` 安装包已撤回，不应继续分发或安装。后续同时提供 Microsoft Store 渠道和 GitHub Releases 独立下载渠道；GitHub 二进制只在获得公共可信签名后发布。
+官方二进制通过 [GitHub Releases](https://github.com/Morick66/SimFlow/releases) 发布。当前提供免安装的 Windows x64 便携版 ZIP，不依赖 Microsoft Store，也不要求导入证书；下载后请先核对同一 Release 中的 `SHA256SUMS.txt`。
+
+当前便携版尚未使用商业代码签名证书，因此 Windows 首次运行时可能显示“未知发布者”或 Microsoft Defender SmartScreen 提示。请只从本仓库的 Releases 页面下载。先前使用个人身份自签证书的 `1.0.5.0` MSIX 已撤回，不应继续分发或安装。
 
 项目采用 [MIT License](LICENSE) 开源。

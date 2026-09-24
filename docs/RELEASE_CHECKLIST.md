@@ -42,21 +42,18 @@ dotnet build SimFlow.csproj -c Release -p:Platform=x64 --no-restore
 - [ ] 离线项目不能修改状态
 - [ ] 自动清理迁移源目录保持禁用
 
-## 5. 打包和签名
+## 5. 便携版打包与发布
 
-- [ ] Store 包已关联 Partner Center 分配的真实应用身份
-- [ ] 已生成 x64 `.msixupload` 并通过 Windows App Certification Kit
-- [ ] GitHub 独立包来自同一公开提交和可追溯自动化构建
-- [ ] GitHub 独立包已由 SignPath Foundation 或其他公共可信服务签名
-- [ ] `Get-AuthenticodeSignature` 为 `Valid`，且签名链无需用户导入开发证书
-- [ ] ZIP、MSIX 写入 `SHA256SUMS.txt`，包内外文件完全一致
+- [ ] GitHub 便携包来自同一公开 tag 和可追溯自动化构建
+- [ ] ZIP 写入 `SHA256SUMS.txt`，发布页文件名与版本号一致
+- [ ] 发布说明明确披露当前没有商业代码签名及 SmartScreen 提示
 - [ ] 发布目录包含安装、升级、卸载和回滚说明
 - [ ] 未上传开发 CER、PFX 或自签二进制
 
 ## 6. 安装验收
 
-- [ ] 全新安装并启动
-- [ ] 从上一版升级
+- [ ] 在全新目录解压并启动
+- [ ] 从上一便携版切换到新版本
 - [ ] 配置、数据库和项目数据升级后保持
 - [ ] 卸载后包外数据保持
 - [ ] 重新安装后能继续读取原数据

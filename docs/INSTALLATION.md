@@ -13,14 +13,14 @@ SimFlow 通过 GitHub Releases 提供免安装的 Windows x64 便携版。它不
 从官方 [GitHub Releases](https://github.com/Morick66/SimFlow/releases) 下载最新的 `SimFlow-版本号-win-x64-portable.zip` 和同一 Release 中的 `SHA256SUMS.txt`。不要从第三方网盘或重新打包页面下载。
 
 ```powershell
-Get-FileHash .\SimFlow-1.0.7.0-win-x64-portable.zip -Algorithm SHA256
+Get-FileHash .\SimFlow-1.0.8.0-win-x64-portable.zip -Algorithm SHA256
 ```
 
 输出的哈希应与 `SHA256SUMS.txt` 完全一致。任何不一致都不要运行。
 
 ## 安装
 
-1. 把 ZIP 完整解压到一个普通目录，例如 `D:\Apps\SimFlow-1.0.7.0`；
+1. 把 ZIP 完整解压到一个普通目录，例如 `D:\Apps\SimFlow-1.0.8.0`；
 2. 运行其中的 `SimFlow.exe`；
 3. 如果 Windows 显示 Microsoft Defender SmartScreen，请确认文件来自本仓库且哈希一致，再选择“更多信息”→“仍要运行”。
 

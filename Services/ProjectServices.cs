@@ -1540,7 +1540,7 @@ public sealed class ProjectMigrationService(
         {
             // project.json 因主存储位置已经切换而允许不同，其余目录和普通文件必须再次完整比对。
             await VerifyPromotedTargetAsync(project, current, cancellationToken);
-            Directory.Delete(current.SourcePath, true);
+            DirectoryVerification.DeleteVerifiedTree(current.SourcePath);
         }
 
         current.State = TransferState.Completed;

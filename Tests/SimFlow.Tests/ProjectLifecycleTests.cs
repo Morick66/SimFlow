@@ -329,6 +329,25 @@ public sealed class ProjectLifecycleTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Archive_DeletesReadOnlySourceTreeAfterVerifiedSwitch()
+    {
+        var project = await _projects.CreateAsync(new CreateProjectRequest { Name = "只读目录归档" });
+        var source = Path.Combine(LocalWorkRoot, project.ProjectCode);
+        var sourceFile = Path.Combine(VersionDataDirectory(source), "readonly-result.bin");
+        await File.WriteAllTextAsync(sourceFile, "verified readonly result");
+        File.SetAttributes(sourceFile, File.GetAttributes(sourceFile) | FileAttributes.ReadOnly);
+        File.SetAttributes(source, File.GetAttributes(source) | FileAttributes.ReadOnly);
+
+        var transfer = await _migration.MigrateAsync(project, StorageLocationCode.WorkstationArchive);
+
+        Assert.Equal(TransferState.Completed, transfer.State);
+        Assert.False(Directory.Exists(source));
+        Assert.Equal("verified readonly result", await File.ReadAllTextAsync(
+            Path.Combine(transfer.TargetPath, "Versions", "V001", "Data", "readonly-result.bin")));
+        Assert.Empty(await _migration.GetIncompleteAsync());
+    }
+
+    [Fact]
     public async Task Archive_KeepsSourceWhenAutomaticCleanupIsDisabled()
     {
         _configuration.Current.DeleteSourceAfterArchive = false;

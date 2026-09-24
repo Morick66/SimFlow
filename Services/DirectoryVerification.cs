@@ -92,4 +92,49 @@ public static class DirectoryVerification
                 throw new IOException($"校验过程中源文件发生变化：{entry.Key}，已保留源目录。");
         }
     }
+
+    /// <summary>
+    /// 删除已经完成副本校验的目录树。Windows 会拒绝删除带只读属性的文件或根目录，
+    /// 因此先逐项清除 ReadOnly；仍然拒绝连接点/符号链接，避免越过项目目录边界。
+    /// </summary>
+    public static void DeleteVerifiedTree(string root)
+    {
+        var rootInfo = new DirectoryInfo(root);
+        if (!rootInfo.Exists) return;
+
+        EnsureNoLinkedParents(root);
+        var directories = new List<DirectoryInfo> { rootInfo };
+        var pending = new Stack<DirectoryInfo>();
+        pending.Push(rootInfo);
+        while (pending.Count > 0)
+        {
+            var directory = pending.Pop();
+            if ((directory.Attributes & FileAttributes.ReparsePoint) != 0)
+                throw new IOException($"不支持连接或符号链接：{directory.FullName}");
+
+            foreach (var file in directory.EnumerateFiles())
+            {
+                if ((file.Attributes & FileAttributes.ReparsePoint) != 0)
+                    throw new IOException($"不支持连接或符号链接文件：{file.FullName}");
+                if ((file.Attributes & FileAttributes.ReadOnly) != 0)
+                    file.Attributes &= ~FileAttributes.ReadOnly;
+            }
+
+            foreach (var child in directory.EnumerateDirectories())
+            {
+                if ((child.Attributes & FileAttributes.ReparsePoint) != 0)
+                    throw new IOException($"不支持连接或符号链接：{child.FullName}");
+                directories.Add(child);
+                pending.Push(child);
+            }
+        }
+
+        // 根目录也可能带只读属性；从最深层向上清除，最后交给系统递归删除。
+        foreach (var directory in directories.OrderByDescending(item => item.FullName.Length))
+        {
+            if ((directory.Attributes & FileAttributes.ReadOnly) != 0)
+                directory.Attributes &= ~FileAttributes.ReadOnly;
+        }
+        Directory.Delete(root, true);
+    }
 }

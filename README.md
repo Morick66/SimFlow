@@ -4,7 +4,7 @@ SimFlow 是面向个人 CAE 仿真工程师的 Windows 原生项目管理工具�
 
 ## 当前版本
 
-- 当前版本：`1.0.7.0`
+- 当前版本：`1.0.8.0`
 - 平台：Windows 10 2004+ / Windows 11，x64
 - 技术栈：.NET 10、WinUI 3、Windows App SDK 2.4、SQLite
 - 数据库结构：Schema 3
@@ -47,6 +47,7 @@ dotnet build SimFlow.csproj -c Release -p:Platform=x64 --no-restore
 - [1.0.5.0 发布说明与验证记录](docs/RELEASE_NOTES_1.0.5.0.md)
 - [1.0.6.0 发布说明](docs/RELEASE_NOTES_1.0.6.0.md)
 - [1.0.7.0 发布说明](docs/RELEASE_NOTES_1.0.7.0.md)
+- [1.0.8.0 发布说明](docs/RELEASE_NOTES_1.0.8.0.md)
 - [发布与签名策略](docs/DISTRIBUTION_AND_SIGNING.md)
 - [代码签名政策](docs/CODE_SIGNING_POLICY.md)
 - [隐私政策](PRIVACY.md)

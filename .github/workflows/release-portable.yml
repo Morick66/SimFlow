@@ -33,6 +33,20 @@ jobs:
       - name: Build portable application
         run: dotnet publish SimFlow.csproj -c Release --no-restore -p:Platform=x64 -p:PublishProfile=win-x64-portable
 
+      - name: Verify portable branding assets
+        shell: pwsh
+        run: |
+          $publishDir = "bin/Release/net10.0-windows10.0.19041.0/win-x64/portable"
+          $requiredAssets = @(
+            "$publishDir/Assets/SimFlow.ico",
+            "$publishDir/Assets/Square150x150Logo.scale-200.png"
+          )
+          foreach ($asset in $requiredAssets) {
+            if (-not (Test-Path $asset -PathType Leaf)) {
+              throw "Portable build is missing required branding asset: $asset"
+            }
+          }
+
       - name: Package release and calculate SHA-256
         id: package
         shell: pwsh

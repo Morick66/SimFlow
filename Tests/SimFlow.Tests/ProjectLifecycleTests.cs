@@ -64,7 +64,8 @@ public sealed class ProjectLifecycleTests : IAsyncLifetime
         var storage = new StorageLocationService(_configuration);
         _projects = new ProjectService(_repository, metadata, storage, NullLogger<ProjectService>.Instance);
         _scanner = new ProjectScannerService(_repository, metadata, storage, NullLogger<ProjectScannerService>.Instance);
-        _migration = new ProjectMigrationService(_repository, metadata, storage, NullLogger<ProjectMigrationService>.Instance);
+        _migration = new ProjectMigrationService(_repository, metadata, storage, _configuration,
+            NullLogger<ProjectMigrationService>.Instance);
     }
 
     public Task DisposeAsync()
@@ -278,7 +279,7 @@ public sealed class ProjectLifecycleTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Migration_VerifiesThenWaitsForExplicitCleanup()
+    public async Task Migration_VerifiesThenAllowsExplicitCleanup()
     {
         var project = await _projects.CreateAsync(new CreateProjectRequest { Name = "迁移测试", Description = "只使用临时测试目录" });
         var source = Path.Combine(_configuration.Current.LocalWorkRoot, project.ProjectCode);
@@ -302,10 +303,75 @@ public sealed class ProjectLifecycleTests : IAsyncLifetime
         Assert.True(Directory.Exists(Path.Combine(target, "Delivery", "Animation")));
         Assert.True(Directory.Exists(Path.Combine(target, "Delivery", "Figures")));
         Assert.True(Directory.Exists(Path.Combine(target, "Versions", "V001", "Results")));
-        var cleanupError = await Assert.ThrowsAsync<InvalidOperationException>(() => _migration.CleanupSourceAsync(transfer));
-        Assert.Contains("禁用自动永久删除", cleanupError.Message);
-        Assert.True(Directory.Exists(source));
+        await _migration.CleanupSourceAsync(transfer);
+        Assert.False(Directory.Exists(source));
+        Assert.Equal(TransferState.Completed, transfer.State);
+        Assert.Empty(await _migration.GetIncompleteAsync());
+    }
+
+    [Fact]
+    public async Task Archive_DeletesSourceAfterVerifiedSwitchByDefault()
+    {
+        var project = await _projects.CreateAsync(new CreateProjectRequest { Name = "自动清理归档" });
+        var source = Path.Combine(LocalWorkRoot, project.ProjectCode);
+        await File.WriteAllTextAsync(Path.Combine(VersionDataDirectory(source), "result.bin"), "verified result");
+
+        var transfer = await _migration.MigrateAsync(project, StorageLocationCode.WorkstationArchive);
+
+        Assert.Equal(TransferState.Completed, transfer.State);
+        Assert.False(Directory.Exists(source));
+        Assert.Equal("verified result", await File.ReadAllTextAsync(
+            Path.Combine(transfer.TargetPath, "Versions", "V001", "Data", "result.bin")));
+        var archived = (await _repository.GetByIdAsync(project.Id))!;
+        Assert.Equal(StorageLocationCode.WorkstationArchive, archived.StorageLocation);
+        Assert.Equal(StorageStatus.Archived, archived.StorageStatus);
+        Assert.Empty(await _migration.GetIncompleteAsync());
+    }
+
+    [Fact]
+    public async Task Archive_KeepsSourceWhenAutomaticCleanupIsDisabled()
+    {
+        _configuration.Current.DeleteSourceAfterArchive = false;
+        await _configuration.SaveAsync(_configuration.Current);
+        var project = await _projects.CreateAsync(new CreateProjectRequest { Name = "保留归档源副本" });
+        var source = Path.Combine(LocalWorkRoot, project.ProjectCode);
+
+        var transfer = await _migration.MigrateAsync(project, StorageLocationCode.WorkstationArchive);
+
         Assert.Equal(TransferState.CleanupPending, transfer.State);
+        Assert.True(Directory.Exists(source));
+        Assert.True(Directory.Exists(transfer.TargetPath));
+        Assert.Single(await _migration.GetIncompleteAsync());
+    }
+
+    [Fact]
+    public async Task Archive_CleanupFailureKeepsArchivedTargetAsPrimaryAndSourceForRetry()
+    {
+        var project = await _projects.CreateAsync(new CreateProjectRequest { Name = "归档清理失败" });
+        var source = Path.Combine(LocalWorkRoot, project.ProjectCode);
+        var sourceFile = Path.Combine(VersionDataDirectory(source), "changing.bin");
+        await File.WriteAllTextAsync(sourceFile, "before");
+        var changed = false;
+        var progress = new CallbackProgress(value =>
+        {
+            if (!changed && value.Message.Contains("正在重新校验源目录", StringComparison.Ordinal))
+            {
+                File.WriteAllText(sourceFile, "changed after switch");
+                changed = true;
+            }
+        });
+
+        var transfer = await _migration.MigrateAsync(project, StorageLocationCode.WorkstationArchive, progress);
+
+        Assert.True(changed);
+        Assert.Equal(TransferState.CleanupPending, transfer.State);
+        Assert.NotNull(transfer.Error);
+        Assert.Contains("归档已完成，但源目录未删除", transfer.Error);
+        Assert.True(Directory.Exists(source));
+        Assert.True(Directory.Exists(transfer.TargetPath));
+        var archived = (await _repository.GetByIdAsync(project.Id))!;
+        Assert.Equal(StorageLocationCode.WorkstationArchive, archived.StorageLocation);
+        Assert.Equal(StorageStatus.Archived, archived.StorageStatus);
     }
 
     [Fact]
@@ -319,6 +385,7 @@ public sealed class ProjectLifecycleTests : IAsyncLifetime
             _repository,
             new ProjectMetadataStore(NullLogger<ProjectMetadataStore>.Instance),
             storage,
+            _configuration,
             NullLogger<ProjectMigrationService>.Instance);
 
         var error = await Assert.ThrowsAsync<IOException>(
@@ -1671,8 +1738,10 @@ public sealed class ProjectLifecycleTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task CleanupSource_FirstReleaseAlwaysKeepsSourceCopyAndStoredPaths()
+    public async Task CleanupSource_RejectsCallerThatSubstitutesStoredPaths()
     {
+        _configuration.Current.DeleteSourceAfterArchive = false;
+        await _configuration.SaveAsync(_configuration.Current);
         var project = await _projects.CreateAsync(new CreateProjectRequest { Name = "目标新增文件" });
         var transfer = await _migration.MigrateAsync(project, StorageLocationCode.WorkstationArchive);
         await File.WriteAllTextAsync(Path.Combine(transfer.TargetPath, "new-result.bin"), "new result");
@@ -1683,7 +1752,7 @@ public sealed class ProjectLifecycleTests : IAsyncLifetime
             State = TransferState.CleanupPending
         };
         var error = await Assert.ThrowsAsync<InvalidOperationException>(() => _migration.CleanupSourceAsync(stale));
-        Assert.Contains("禁用自动永久删除", error.Message);
+        Assert.Contains("迁移记录与当前请求不一致", error.Message);
         Assert.True(Directory.Exists(transfer.SourcePath));
         Assert.True(File.Exists(Path.Combine(transfer.TargetPath, "new-result.bin")));
         Assert.Equal(TransferState.CleanupPending, stale.State);
@@ -1793,17 +1862,19 @@ public sealed class ProjectLifecycleTests : IAsyncLifetime
         using (var locked = new FileStream(sourceFile, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
         {
             await Assert.ThrowsAsync<IOException>(() => service.SaveAsync(destination,
-                currentBefore.WorkstationWorkRoot, currentBefore.WorkstationArchiveRoot, true));
+                currentBefore.WorkstationWorkRoot, currentBefore.WorkstationArchiveRoot, true,
+                currentBefore.DeleteSourceAfterArchive));
         }
         Assert.Same(currentBefore, _configuration.Current);
         Assert.Equal(configBefore, await File.ReadAllTextAsync(_paths.ConfigurationPath));
         Assert.True(Directory.Exists(Path.Combine(destination, ordered[0].RelativePath)));
         Assert.True(File.Exists(sourceFile));
-        await service.SaveAsync(destination, currentBefore.WorkstationWorkRoot, currentBefore.WorkstationArchiveRoot, true);
+        await service.SaveAsync(destination, currentBefore.WorkstationWorkRoot, currentBefore.WorkstationArchiveRoot, true, false);
         Assert.Equal(destination, _configuration.Current.LocalWorkRoot);
         Assert.NotSame(currentBefore, _configuration.Current);
         Assert.Equal(LocalWorkRoot, currentBefore.LocalWorkRoot);
         Assert.Equal(reportTemplate, _configuration.Current.SimulationReportTemplatePath);
+        Assert.False(_configuration.Current.DeleteSourceAfterArchive);
         Assert.Equal("data", await File.ReadAllTextAsync(Path.Combine(destination, ordered[1].RelativePath, "locked.bin")));
     }
 
@@ -1826,7 +1897,7 @@ public sealed class ProjectLifecycleTests : IAsyncLifetime
         }
         var before = await File.ReadAllTextAsync(_paths.ConfigurationPath);
         await Assert.ThrowsAnyAsync<IOException>(() => new StorageSettingsService(_configuration, _repository)
-            .SaveAsync(destination, "", "", true));
+            .SaveAsync(destination, "", "", true, true));
         Assert.Equal(LocalWorkRoot, _configuration.Current.LocalWorkRoot);
         Assert.Equal(before, await File.ReadAllTextAsync(_paths.ConfigurationPath));
         if (scenario == "conflict") Assert.Equal("keep", await File.ReadAllTextAsync(targetFile));
@@ -1839,7 +1910,7 @@ public sealed class ProjectLifecycleTests : IAsyncLifetime
         var before = await File.ReadAllTextAsync(_paths.ConfigurationPath);
         using var locked = new FileStream(_paths.ConfigurationPath + ".tmp", FileMode.Create, FileAccess.ReadWrite, FileShare.None);
         await Assert.ThrowsAsync<IOException>(() => new StorageSettingsService(_configuration, _repository)
-            .SaveAsync(Path.Combine(_root, "NewWork"), "new-station", "new-archive", false));
+            .SaveAsync(Path.Combine(_root, "NewWork"), "new-station", "new-archive", false, true));
         Assert.Same(current, _configuration.Current);
         Assert.Equal(LocalWorkRoot, current.LocalWorkRoot);
         Assert.Equal(before, await File.ReadAllTextAsync(_paths.ConfigurationPath));

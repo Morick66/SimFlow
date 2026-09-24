@@ -1209,6 +1209,7 @@ public sealed class ProjectMigrationService(
     IProjectRepository repository,
     IProjectMetadataStore metadataStore,
     IStorageLocationService storage,
+    IConfigurationService configuration,
     ILogger<ProjectMigrationService> logger) : IProjectMigrationService
 {
     private sealed record FileManifestEntry(string RelativePath, long Length, string Hash);
@@ -1266,6 +1267,7 @@ public sealed class ProjectMigrationService(
             // 都不得触发主副本切换。
             await VerifyPromotedTargetAsync(project, transfer, cancellationToken);
             await FinalizePromotedTransferAsync(project, transfer, CancellationToken.None);
+            await CleanupArchivedSourceIfConfiguredAsync(project, transfer, progress);
             return transfer;
         }
 
@@ -1391,7 +1393,7 @@ public sealed class ProjectMigrationService(
             // 目录已经提升为正式目标后，不再响应用户取消；必须把数据库和迁移记录推进到可恢复状态。
             await repository.UpdateTransferAsync(transfer, CancellationToken.None);
             await FinalizePromotedTransferAsync(project, transfer, CancellationToken.None);
-            progress?.Report(new MigrationProgress(TransferState.CleanupPending, "迁移完成，旧源副本已保留，请手工核对后清理", null, transfer.TotalBytes, transfer.TotalBytes));
+            await CleanupArchivedSourceIfConfiguredAsync(project, transfer, progress);
             return transfer;
         }
         catch (OperationCanceledException)
@@ -1446,6 +1448,33 @@ public sealed class ProjectMigrationService(
         await repository.UpdateTransferAsync(transfer, cancellationToken);
     }
 
+    private async Task CleanupArchivedSourceIfConfiguredAsync(ProjectRecord project, TransferOperationRecord transfer,
+        IProgress<MigrationProgress>? progress)
+    {
+        if (transfer.TargetLocation != StorageLocationCode.WorkstationArchive
+            || !configuration.Current.DeleteSourceAfterArchive)
+        {
+            progress?.Report(new MigrationProgress(TransferState.CleanupPending, "迁移完成，旧源副本已保留", null, transfer.TotalBytes, transfer.TotalBytes));
+            return;
+        }
+
+        try
+        {
+            progress?.Report(new MigrationProgress(TransferState.CleanupPending, "归档已切换，正在重新校验源目录", null, transfer.TotalBytes, transfer.TotalBytes));
+            await CleanupSourceAsync(transfer, CancellationToken.None);
+            progress?.Report(new MigrationProgress(TransferState.Completed, "归档完成，源目录已删除", null, transfer.TotalBytes, transfer.TotalBytes));
+        }
+        catch (Exception cleanupError)
+        {
+            transfer.State = TransferState.CleanupPending;
+            transfer.Error = $"归档已完成，但源目录未删除：{cleanupError.Message}";
+            transfer.UpdatedAt = DateTimeOffset.Now;
+            await repository.UpdateTransferAsync(transfer, CancellationToken.None);
+            logger.LogWarning(cleanupError, "Archive completed but source cleanup failed for {ProjectCode}", project.ProjectCode);
+            progress?.Report(new MigrationProgress(TransferState.CleanupPending, "归档完成，源目录待清理", null, transfer.TotalBytes, transfer.TotalBytes));
+        }
+    }
+
     private async Task VerifyPromotedTargetAsync(ProjectRecord project, TransferOperationRecord transfer, CancellationToken cancellationToken)
     {
         if (!Directory.Exists(transfer.SourcePath))
@@ -1480,9 +1509,47 @@ public sealed class ProjectMigrationService(
             .SingleOrDefault(item => item.Id == transfer.Id);
         if (current is null || current.State != TransferState.CleanupPending)
             throw new InvalidOperationException("当前迁移不处于待清理状态，请刷新恢复中心。");
-        // 首发版禁止应用自动永久删除迁移源副本。即使哈希校验通过，
-        // 外部求解器也可能在“校验—删除”之间继续写入；保留 CleanupPending 供用户手工核对。
-        throw new InvalidOperationException("首发版已禁用自动永久删除迁移源副本；请在确认求解器已停止且目标副本完整后手工备份/清理。");
+
+        // 只信任数据库中的迁移记录，拒绝调用方用同一 Id 替换路径或项目身份。
+        if (current.ProjectId != transfer.ProjectId
+            || current.SourceLocation != transfer.SourceLocation
+            || current.TargetLocation != transfer.TargetLocation
+            || !DirectoryVerification.PathsEqual(current.SourcePath, transfer.SourcePath)
+            || !DirectoryVerification.PathsEqual(current.TargetPath, transfer.TargetPath))
+        {
+            throw new InvalidOperationException("迁移记录与当前请求不一致，已停止清理源目录。");
+        }
+
+        var project = await repository.GetByIdAsync(current.ProjectId, cancellationToken)
+            ?? throw new InvalidOperationException("迁移对应的项目已不存在，已停止清理源目录。");
+        if (project.StorageLocation != current.TargetLocation
+            || !DirectoryVerification.PathsEqual(storage.ResolveProjectPath(project), current.TargetPath))
+        {
+            throw new InvalidOperationException("项目当前主路径不是迁移目标，已停止清理源目录。");
+        }
+
+        var targetMetadata = await metadataStore.ReadProjectAsync(Path.Combine(current.TargetPath, "project.json"), cancellationToken);
+        if (targetMetadata is null
+            || !string.Equals(targetMetadata.Id, project.ProjectCode, StringComparison.Ordinal)
+            || targetMetadata.CreatedAt != project.CreatedAt)
+        {
+            throw new IOException("目标副本的项目身份无法确认，已停止清理源目录。");
+        }
+
+        if (Directory.Exists(current.SourcePath))
+        {
+            // project.json 因主存储位置已经切换而允许不同，其余目录和普通文件必须再次完整比对。
+            await VerifyPromotedTargetAsync(project, current, cancellationToken);
+            Directory.Delete(current.SourcePath, true);
+        }
+
+        current.State = TransferState.Completed;
+        current.Error = null;
+        current.UpdatedAt = DateTimeOffset.Now;
+        await repository.UpdateTransferAsync(current, cancellationToken);
+        transfer.State = current.State;
+        transfer.Error = null;
+        transfer.UpdatedAt = current.UpdatedAt;
     }
 
     public Task<IReadOnlyList<TransferOperationRecord>> GetIncompleteAsync(CancellationToken cancellationToken = default)

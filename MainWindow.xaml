@@ -475,6 +475,13 @@
                                                         <Button Grid.Column="1" Content="测试连接" Click="SettingsTestArchive_Click" Style="{StaticResource SecondaryButtonStyle}" VerticalAlignment="Bottom" />
                                                         <Button Grid.Column="2" Content="打开" Click="SettingsOpenArchive_Click" Style="{StaticResource SecondaryButtonStyle}" VerticalAlignment="Bottom" />
                                                     </Grid>
+                                                    <ToggleSwitch x:Name="SettingsDeleteSourceAfterArchiveToggle"
+                                                                  Header="归档成功后删除源目录"
+                                                                  OnContent="删除源目录"
+                                                                  OffContent="保留源副本"
+                                                                  IsOn="True" />
+                                                    <TextBlock Text="开启后，仅在归档副本完成校验并切换为主副本后删除原 Work 目录；若文件被占用或再次校验失败，将保留源目录并进入待清理状态。"
+                                                               Style="{StaticResource SecondaryTextStyle}" TextWrapping="Wrap" />
                                                 </StackPanel>
                                             </Border>
                                             <Button Content="保存设置" Style="{StaticResource PrimaryButtonStyle}" Click="SaveSettings_Click" HorizontalAlignment="Left" />

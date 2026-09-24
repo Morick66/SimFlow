@@ -4,7 +4,7 @@ SimFlow 是面向个人 CAE 仿真工程师的 Windows 原生项目管理工具�
 
 ## 当前版本
 
-- 当前版本：`1.0.6.0`
+- 当前版本：`1.0.7.0`
 - 平台：Windows 10 2004+ / Windows 11，x64
 - 技术栈：.NET 10、WinUI 3、Windows App SDK 2.4、SQLite
 - 数据库结构：Schema 3
@@ -24,7 +24,8 @@ SimFlow 是面向个人 CAE 仿真工程师的 Windows 原生项目管理工具�
 
 - 项目和版本的“删除文件夹”会移动到 `.simflow-recovery`，不会立即永久删除。
 - 迁移提升目标前会重新比对当前源目录与目标副本。
-- 首发版不会自动永久删除迁移后的源副本；请在停止求解器并人工核对后自行备份或清理。
+- 归档默认在目标完成校验并成为主副本后删除原 Work 目录；可在设置中改为保留源副本。
+- 删除前会再次核验项目身份、主路径及源/目标内容；删除失败时保留源目录并进入待清理状态。
 - 存储位置离线时禁止修改项目状态，避免数据库与 `project.json` 不一致。
 - 数据库、配置和日志位于 `%LOCALAPPDATA%\SimFlow`；项目文件位于用户配置的 Work 目录，均不放在安装目录内。
 
@@ -45,6 +46,7 @@ dotnet build SimFlow.csproj -c Release -p:Platform=x64 --no-restore
 - [发布检查清单](docs/RELEASE_CHECKLIST.md)
 - [1.0.5.0 发布说明与验证记录](docs/RELEASE_NOTES_1.0.5.0.md)
 - [1.0.6.0 发布说明](docs/RELEASE_NOTES_1.0.6.0.md)
+- [1.0.7.0 发布说明](docs/RELEASE_NOTES_1.0.7.0.md)
 - [发布与签名策略](docs/DISTRIBUTION_AND_SIGNING.md)
 - [代码签名政策](docs/CODE_SIGNING_POLICY.md)
 - [隐私政策](PRIVACY.md)

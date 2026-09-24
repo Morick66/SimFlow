@@ -331,6 +331,8 @@ public sealed class AppConfiguration
     public string ProjectPlaceholderImage { get; set; } = string.Empty;
     /// <summary>仿真报告模板文件；创建报告时复制到项目的 Delivery 目录。</summary>
     public string SimulationReportTemplatePath { get; set; } = string.Empty;
+    /// <summary>归档副本完成校验并切换为主副本后，是否删除原 Work 目录。</summary>
+    public bool DeleteSourceAfterArchive { get; set; } = true;
     public bool CheckWorkstationOnStartup { get; set; } = true;
     public List<SoftwareConfiguration> Software { get; set; } =
     [

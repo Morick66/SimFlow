@@ -370,6 +370,7 @@ public sealed partial class MainViewModel(
         WorkstationArchiveRoot = source.WorkstationArchiveRoot,
         ProjectPlaceholderImage = source.ProjectPlaceholderImage,
         SimulationReportTemplatePath = source.SimulationReportTemplatePath,
+        DeleteSourceAfterArchive = source.DeleteSourceAfterArchive,
         CheckWorkstationOnStartup = source.CheckWorkstationOnStartup,
         Software = source.Software.Select(candidate => new SoftwareConfiguration { Name = candidate.Name }).ToList()
     };

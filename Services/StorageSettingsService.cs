@@ -6,6 +6,7 @@ namespace SimFlow.Services;
 public sealed class StorageSettingsService(IConfigurationService configuration, IProjectRepository repository)
 {
     public async Task SaveAsync(string localRoot, string workstationRoot, string archiveRoot, bool copyProjects,
+        bool deleteSourceAfterArchive,
         CancellationToken cancellationToken = default)
     {
         var previous = configuration.Current;
@@ -67,6 +68,7 @@ public sealed class StorageSettingsService(IConfigurationService configuration, 
             WorkstationArchiveRoot = archiveRoot,
             ProjectPlaceholderImage = previous.ProjectPlaceholderImage,
             SimulationReportTemplatePath = previous.SimulationReportTemplatePath,
+            DeleteSourceAfterArchive = deleteSourceAfterArchive,
             CheckWorkstationOnStartup = previous.CheckWorkstationOnStartup,
             Software = previous.Software.Select(item => new SoftwareConfiguration { Name = item.Name }).ToList()
         };

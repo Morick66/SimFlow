@@ -1085,13 +1085,24 @@ public sealed partial class MainWindow : Window
         var showTask = dialog.ShowAsync().AsTask();
         try
         {
-            await ViewModel.MigrateAsync(target, progress, _migrationCancellation.Token);
+            var transfer = await ViewModel.MigrateAsync(target, progress, _migrationCancellation.Token);
             dialog.Hide();
             await showTask;
             UpdateSelectedPath();
-            ShowWarning(
-                "迁移完成，源副本已保留",
-                "目标已校验并成为正式主副本。首发版不会自动永久删除源目录；请停止求解器并人工核对目标后，再在文件系统中备份或清理旧副本。");
+            if (transfer.State == TransferState.Completed)
+            {
+                ShowSuccess("归档完成", "归档副本已校验并成为主副本，原 Work 目录已删除。");
+            }
+            else if (target == StorageLocationCode.WorkstationArchive && !string.IsNullOrWhiteSpace(transfer.Error))
+            {
+                ShowWarning("归档完成，源目录待清理", transfer.Error);
+            }
+            else
+            {
+                ShowWarning(
+                    target == StorageLocationCode.WorkstationArchive ? "归档完成，源副本已保留" : "迁移完成，源副本已保留",
+                    "目标已校验并成为正式主副本。可在设置中选择归档成功后是否删除源目录。");
+            }
         }
         catch (OperationCanceledException)
         {
@@ -1137,6 +1148,7 @@ public sealed partial class MainWindow : Window
         SettingsLocalWorkBox.Text = config.LocalWorkRoot;
         SettingsWorkstationBox.Text = config.WorkstationWorkRoot;
         SettingsArchiveBox.Text = config.WorkstationArchiveRoot;
+        SettingsDeleteSourceAfterArchiveToggle.IsOn = config.DeleteSourceAfterArchive;
     }
 
     private void SettingsOpenLocal_Click(object sender, RoutedEventArgs e) => OpenPath(SettingsLocalWorkBox.Text);
@@ -1332,7 +1344,8 @@ public sealed partial class MainWindow : Window
             }
             await Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions
                 .GetRequiredService<StorageSettingsService>(App.Services)
-                .SaveAsync(newRoot, workstationRoot, archiveRoot, copyProjects);
+                .SaveAsync(newRoot, workstationRoot, archiveRoot, copyProjects,
+                    SettingsDeleteSourceAfterArchiveToggle.IsOn);
             await ViewModel.RefreshStorageAvailabilityAsync();
             await ViewModel.RefreshAsync();
             ShowSuccess("设置已保存", copyProjects ? "全部项目已复制并校验，新存储路径已生效。" : "新的存储路径会立即用于后续操作。");
@@ -1488,13 +1501,13 @@ public sealed partial class MainWindow : Window
             foreach (var transfer in transfers)
             {
                 var canAbandon = transfer.State is not TransferState.Switched and not TransferState.CleanupPending;
-                var actionText = transfer.State == TransferState.CleanupPending ? "知道了" :
+                var actionText = transfer.State == TransferState.CleanupPending ? "重新校验并删除源目录" :
                     transfer.State == TransferState.Switched ? "完成切换" : "继续或重试";
                 var message = new TextBlock
                 {
                     Width = 560,
                     TextWrapping = TextWrapping.Wrap,
-                    Text = $"状态：{transfer.State}\n源：{transfer.SourcePath}\n目标：{transfer.TargetPath}\n{transfer.Error ?? string.Empty}\n\n{(transfer.State == TransferState.CleanupPending ? "目标已经成为主副本。首发版不自动永久删除源目录；请停止求解器并人工核对目标后，在文件系统中备份或清理旧副本。" : "重试会先清理本次未完成的暂存目录，再从源目录重新复制；若正式目标已生成，会先验证源和目标内容再完成数据库切换。")}"
+                    Text = $"状态：{transfer.State}\n源：{transfer.SourcePath}\n目标：{transfer.TargetPath}\n{transfer.Error ?? string.Empty}\n\n{(transfer.State == TransferState.CleanupPending ? "目标已经成为主副本。确认 Adams 和求解器已经停止后，可重新校验源与目标并删除源目录。" : "重试会先清理本次未完成的暂存目录，再从源目录重新复制；若正式目标已生成，会先验证源和目标内容再完成数据库切换。")}"
                 };
                 var dialog = new ContentDialog
                 {
@@ -1515,7 +1528,8 @@ public sealed partial class MainWindow : Window
                 }
                 if (transfer.State == TransferState.CleanupPending)
                 {
-                    ShowWarning("源副本保持不变", "SimFlow 没有执行删除。请在确认求解器已停止且目标副本完整后，通过文件系统手工备份或清理源目录。");
+                    await ViewModel.CleanupTransferAsync(transfer);
+                    ShowSuccess("源目录已清理", "目标副本保持为主副本。");
                     continue;
                 }
 

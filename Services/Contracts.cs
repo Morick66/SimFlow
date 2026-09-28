@@ -88,6 +88,18 @@ public interface IProjectService
     Task DeleteAsync(ProjectRecord project, bool deleteDirectory, CancellationToken cancellationToken = default);
 }
 
+public interface IProjectRecoveryService
+{
+    /// <summary>只读扫描三个已配置存储根下的项目回收区。</summary>
+    Task<IReadOnlyList<RecoveryProjectItem>> GetItemsAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>把项目目录移回原位置，并从 project.json 重建数据库记录。</summary>
+    Task RestoreAsync(RecoveryProjectItem item, CancellationToken cancellationToken = default);
+
+    /// <summary>不可恢复地删除一个经过路径边界验证的回收项目目录。</summary>
+    Task PermanentlyDeleteAsync(RecoveryProjectItem item, CancellationToken cancellationToken = default);
+}
+
 public interface IProjectMigrationService
 {
     Task<TransferOperationRecord> MigrateAsync(ProjectRecord project, StorageLocationCode target, IProgress<MigrationProgress>? progress = null, CancellationToken cancellationToken = default);

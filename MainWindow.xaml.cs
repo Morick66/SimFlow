@@ -124,6 +124,7 @@ public sealed partial class MainWindow : Window
 
     /// <summary>正在程序化同步筛选条状态，忽略由此产生的 Checked 回调。</summary>
     private bool _syncingFilterChips;
+    private bool _syncingAdvancedFilters;
 
     private static readonly string[] WaitReasons =
         ["等待试验", "等待CAD模型", "等待工程师提供参数", "等待设计方案", "等待方案确认", "等待评审", "等待其他数据", "其他"];
@@ -170,6 +171,7 @@ public sealed partial class MainWindow : Window
         {
             UpdateViewState();
             if (e.PropertyName == nameof(MainViewModel.SelectedProject)) UpdateSelectedPath();
+            if (e.PropertyName == nameof(MainViewModel.TotalProjectCount)) SyncAdvancedFilterControls();
         }
         else
         {
@@ -190,8 +192,9 @@ public sealed partial class MainWindow : Window
         ProjectListEmptyState.Visibility = AsVisibility(!ViewModel.HasProjects);
         SettingsPanel.Visibility = AsVisibility(ViewModel.IsSettings);
         StatisticsPanel.Visibility = AsVisibility(ViewModel.IsStatistics);
+        RecycleBinPanel.Visibility = AsVisibility(ViewModel.IsRecycleBin);
         // 统计页自带标题与时间范围：整行收掉（行高 + 内容一起），避免标题重复占位或溢出。
-        var showSectionHeader = !ViewModel.IsStatistics;
+        var showSectionHeader = !ViewModel.IsStatistics && !ViewModel.IsRecycleBin;
         SectionHeader.Visibility = AsVisibility(showSectionHeader);
         SectionHeaderRow.Height = showSectionHeader ? new GridLength(56) : new GridLength(0);
         SortCombo.Visibility = AsVisibility(ViewModel.ShowProjectList);
@@ -245,9 +248,9 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        if (ViewModel.IsStatistics)
+        if (ViewModel.IsStatistics || ViewModel.IsRecycleBin)
         {
-            // 统计页自带内容、不需要项目详情：右侧列收成 0，页面本身占满可用宽度。
+            // 统计与回收站页自带内容、不需要项目详情：右侧列收成 0，页面本身占满可用宽度。
             ListColumn.MinWidth = 360;
             ListColumn.Width = new GridLength(1, GridUnitType.Star);
             DetailColumn.Width = new GridLength(0);
@@ -283,6 +286,7 @@ public sealed partial class MainWindow : Window
         try
         {
             await ViewModel.InitializeAsync();
+            SyncAdvancedFilterControls();
             if (string.Equals(Environment.GetEnvironmentVariable("SIMFLOW_SEED_DEMO"), "1", StringComparison.Ordinal))
             {
                 await SeedDemoDataAsync();
@@ -348,6 +352,10 @@ public sealed partial class MainWindow : Window
         else if (string.Equals(key, "statistics", StringComparison.Ordinal))
         {
             _ = StatisticsPanel.RefreshAsync();
+        }
+        else if (string.Equals(key, "recyclebin", StringComparison.Ordinal))
+        {
+            _ = ViewModel.RefreshRecoveryItemsAsync();
         }
 
         // 窄窗口下详情是独立页：切换分区后回到该分区的列表，再由用户点击进入详情。
@@ -423,6 +431,148 @@ public sealed partial class MainWindow : Window
             2 => ProjectSortMode.Name,
             _ => ProjectSortMode.RecentlyUpdated
         });
+    }
+
+    private void SyncAdvancedFilterControls()
+    {
+        if (RequesterFilterCombo is null || SimulationTypeFilterCombo is null) return;
+        _syncingAdvancedFilters = true;
+        try
+        {
+            RequesterFilterCombo.Items.Clear();
+            RequesterFilterCombo.Items.Add(new ComboBoxItem { Content = "全部需求人", Tag = null });
+            RequesterFilterCombo.Items.Add(new ComboBoxItem { Content = "未填写需求人", Tag = string.Empty });
+            foreach (var requester in ViewModel.RequesterFilterOptions)
+                RequesterFilterCombo.Items.Add(new ComboBoxItem { Content = requester, Tag = requester });
+            RequesterFilterCombo.SelectedItem = RequesterFilterCombo.Items.OfType<ComboBoxItem>()
+                .FirstOrDefault(item => Equals(item.Tag, ViewModel.RequesterFilter)) ?? RequesterFilterCombo.Items[0];
+
+            SimulationTypeFilterCombo.Items.Clear();
+            SimulationTypeFilterCombo.Items.Add(new ComboBoxItem { Content = "全部仿真类型", Tag = null });
+            SimulationTypeFilterCombo.Items.Add(new ComboBoxItem { Content = SimulationTypes.Unclassified, Tag = "__unclassified__" });
+            foreach (var type in SimulationTypes.All)
+                SimulationTypeFilterCombo.Items.Add(new ComboBoxItem { Content = SimulationTypes.Describe(type), Tag = type });
+            SimulationTypeFilterCombo.SelectedItem = SimulationTypeFilterCombo.Items.OfType<ComboBoxItem>()
+                .FirstOrDefault(item => ViewModel.FilterUnclassified
+                    ? Equals(item.Tag, "__unclassified__")
+                    : Equals(item.Tag, ViewModel.SimulationTypeFilter)) ?? SimulationTypeFilterCombo.Items[0];
+            UpdateAdvancedFilterButtons();
+        }
+        finally
+        {
+            _syncingAdvancedFilters = false;
+        }
+    }
+
+    private void RequesterFilter_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_syncingAdvancedFilters || RequesterFilterCombo.SelectedItem is not ComboBoxItem item) return;
+        ViewModel.SetRequesterFilter(item.Tag as string);
+        UpdateAdvancedFilterButtons();
+        ClearAllSelections();
+    }
+
+    private void SimulationTypeFilter_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_syncingAdvancedFilters || SimulationTypeFilterCombo.SelectedItem is not ComboBoxItem item) return;
+        ViewModel.SetSimulationTypeFilter(item.Tag is SimulationType type ? type : null, Equals(item.Tag, "__unclassified__"));
+        UpdateAdvancedFilterButtons();
+        ClearAllSelections();
+    }
+
+    private async void TagFilter_Click(object sender, RoutedEventArgs e)
+    {
+        var selected = await ShowMultiSelectFilterAsync("筛选标签", "同一维度内匹配任一选中标签", ViewModel.TagFilterOptions, ViewModel.SelectedTagFilters);
+        if (selected is null) return;
+        ViewModel.SetTagFilters(selected);
+        UpdateAdvancedFilterButtons();
+        ClearAllSelections();
+    }
+
+    private async void SoftwareFilter_Click(object sender, RoutedEventArgs e)
+    {
+        var selected = await ShowMultiSelectFilterAsync("筛选使用软件", "同一维度内匹配任一选中软件", ViewModel.SoftwareFilterOptions, ViewModel.SelectedSoftwareFilters);
+        if (selected is null) return;
+        ViewModel.SetSoftwareFilters(selected);
+        UpdateAdvancedFilterButtons();
+        ClearAllSelections();
+    }
+
+    private async Task<IReadOnlyList<string>?> ShowMultiSelectFilterAsync(string title, string hint,
+        IReadOnlyList<string> options, IReadOnlyCollection<string> selected)
+    {
+        var list = new ListView
+        {
+            SelectionMode = ListViewSelectionMode.Multiple,
+            ItemsSource = options,
+            MaxHeight = 360
+        };
+        foreach (var option in options.Where(option => selected.Contains(option, StringComparer.OrdinalIgnoreCase)))
+            list.SelectedItems.Add(option);
+        var content = new StackPanel { Width = 360, Spacing = 8 };
+        content.Children.Add(new TextBlock
+        {
+            Text = hint,
+            FontSize = 12,
+            Foreground = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 104, 119, 146)),
+            TextWrapping = TextWrapping.Wrap
+        });
+        content.Children.Add(list);
+        if (options.Count == 0)
+            content.Children.Add(new TextBlock { Text = "当前没有可筛选项。", Foreground = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 104, 119, 146)) });
+        if (await ShowDialogAsync(CreateDialog(title, content, "应用")) != ContentDialogResult.Primary) return null;
+        return list.SelectedItems.Cast<string>().ToList();
+    }
+
+    private void ClearAdvancedFilters_Click(object sender, RoutedEventArgs e)
+    {
+        ViewModel.ClearAdvancedFilters();
+        SyncAdvancedFilterControls();
+        ClearAllSelections();
+    }
+
+    private void UpdateAdvancedFilterButtons()
+    {
+        if (TagFilterButton is null || SoftwareFilterButton is null) return;
+        TagFilterButton.Content = ViewModel.SelectedTagFilters.Count == 0 ? "标签：全部" : $"标签：{ViewModel.SelectedTagFilters.Count}";
+        SoftwareFilterButton.Content = ViewModel.SelectedSoftwareFilters.Count == 0 ? "软件：全部" : $"软件：{ViewModel.SelectedSoftwareFilters.Count}";
+    }
+
+    private async void RefreshRecycleBin_Click(object sender, RoutedEventArgs e)
+    {
+        try { await ViewModel.RefreshRecoveryItemsAsync(); }
+        catch (Exception ex) { ShowError("刷新回收站失败", ex); }
+    }
+
+    private async void RestoreRecoveryProject_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { DataContext: RecoveryProjectItem item }) return;
+        var result = await ConfirmAsync("恢复项目", $"将「{item.ProjectName}」（{item.ProjectCode}）恢复到：\n{item.OriginalPath}", "恢复");
+        if (result != ContentDialogResult.Primary) return;
+        try
+        {
+            await ViewModel.RestoreRecoveryItemAsync(item);
+            SyncAdvancedFilterControls();
+            ShowSuccess("项目已恢复", ViewModel.StatusMessage);
+        }
+        catch (Exception ex) { ShowError("恢复项目失败", ex); }
+    }
+
+    private async void PermanentlyDeleteRecoveryProject_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { DataContext: RecoveryProjectItem item }) return;
+        var result = await ConfirmAsync(
+            "彻底删除项目",
+            $"将永久删除「{item.ProjectName}」（{item.ProjectCode}）的 {item.FileCount:N0} 个文件。此操作无法撤销。",
+            "彻底删除",
+            "取消");
+        if (result != ContentDialogResult.Primary) return;
+        try
+        {
+            await ViewModel.PermanentlyDeleteRecoveryItemAsync(item);
+            ShowSuccess("已彻底删除", item.ProjectCode);
+        }
+        catch (Exception ex) { ShowError("彻底删除失败", ex); }
     }
 
     private void ProjectList_ItemClick(object sender, ItemClickEventArgs e)

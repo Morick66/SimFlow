@@ -23,8 +23,9 @@ internal sealed class TagEditor
     private static readonly Color Transparent = Color.FromArgb(0, 0, 0, 0);
 
     private readonly List<string> _tags = [];
-    private readonly StackPanel _chipPanel = new() { Orientation = Orientation.Horizontal, Spacing = 6 };
-    private readonly StackPanel _suggestionPanel = new() { Orientation = Orientation.Horizontal, Spacing = 6 };
+    // 按对话框可用宽度自动换行，不再把标签塞进单行横向滚动区。
+    private readonly VariableSizedWrapGrid _chipPanel = new() { Orientation = Orientation.Horizontal };
+    private readonly VariableSizedWrapGrid _suggestionPanel = new() { Orientation = Orientation.Horizontal };
     private readonly TextBox _input;
     private readonly TextBlock _emptyHint;
     private readonly IReadOnlyList<string> _suggestions;
@@ -64,14 +65,7 @@ internal sealed class TagEditor
             CornerRadius = new CornerRadius(7),
             Padding = new Thickness(9, 8, 9, 8),
             MinHeight = 42,
-            Child = new ScrollViewer
-            {
-                HorizontalScrollBarVisibility = ScrollBarVisibility.Hidden,
-                VerticalScrollBarVisibility = ScrollBarVisibility.Disabled,
-                HorizontalScrollMode = ScrollMode.Auto,
-                VerticalScrollMode = ScrollMode.Disabled,
-                Content = _chipPanel
-            }
+            Child = _chipPanel
         };
 
         var root = new StackPanel();
@@ -87,15 +81,8 @@ internal sealed class TagEditor
                 Margin = new Thickness(0, 9, 0, 0),
                 Foreground = new SolidColorBrush(MutedForeground)
             });
-            root.Children.Add(new ScrollViewer
-            {
-                HorizontalScrollBarVisibility = ScrollBarVisibility.Hidden,
-                VerticalScrollBarVisibility = ScrollBarVisibility.Disabled,
-                HorizontalScrollMode = ScrollMode.Auto,
-                VerticalScrollMode = ScrollMode.Disabled,
-                Margin = new Thickness(0, 6, 0, 0),
-                Content = _suggestionPanel
-            });
+            _suggestionPanel.Margin = new Thickness(0, 6, 0, 0);
+            root.Children.Add(_suggestionPanel);
         }
 
         Root = root;
@@ -181,6 +168,7 @@ internal sealed class TagEditor
             Background = new SolidColorBrush(removable ? ChipBackground : SuggestionBackground),
             CornerRadius = new CornerRadius(12),
             Padding = new Thickness(10, 5, 10, 5),
+            Margin = new Thickness(0, 0, 6, 6),
             Child = content
         };
 

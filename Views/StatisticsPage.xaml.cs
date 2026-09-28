@@ -219,7 +219,8 @@ public sealed partial class StatisticsPage : UserControl
 
         var columns = width >= 1120 ? 5 : width >= 900 ? 3 : width >= 560 ? 2 : 1;
         panel.ItemWidth = Math.Max(160, Math.Floor((width - (columns * 12d)) / columns));
-        panel.ItemHeight = 96;
+        // 标题、数值/同比和两行脚注都需要真实布局空间；96px 会被 item 底部间距吃掉后裁切脚注。
+        panel.ItemHeight = 116;
     }
 
     private void RenderDonut()

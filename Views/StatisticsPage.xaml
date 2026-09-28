@@ -96,11 +96,11 @@
                 <!-- 顶部概览卡片：只显示真实数量，不编造同比 -->
                 <ItemsControl x:Name="KpiRow" ItemsSource="{x:Bind ViewModel.KpiCards, Mode=OneWay}">
                     <ItemsControl.ItemsPanel>
-                        <ItemsPanelTemplate><ItemsWrapGrid Orientation="Horizontal" ItemWidth="220" ItemHeight="96" /></ItemsPanelTemplate>
+                        <ItemsPanelTemplate><ItemsWrapGrid Orientation="Horizontal" ItemWidth="220" ItemHeight="116" /></ItemsPanelTemplate>
                     </ItemsControl.ItemsPanel>
                     <ItemsControl.ItemTemplate>
                         <DataTemplate x:DataType="viewModels:KpiCardViewModel">
-                            <Border Style="{StaticResource CardBorderStyle}" Margin="0,0,12,12" Padding="14,12">
+                            <Border Style="{StaticResource CardBorderStyle}" Margin="0,0,12,10" Padding="14,11">
                                 <Grid ColumnSpacing="12">
                                     <Grid.ColumnDefinitions><ColumnDefinition Width="40" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
                                     <Border Width="40" Height="40" CornerRadius="10" VerticalAlignment="Top"
@@ -109,7 +109,7 @@
                                                   Foreground="{Binding AccentColor, Converter={StaticResource HexBrushConverter}}" />
                                     </Border>
                                     <StackPanel Grid.Column="1" Spacing="1" VerticalAlignment="Center">
-                                        <TextBlock Text="{x:Bind Title}" FontSize="12" Foreground="{ThemeResource SimFlowTextSecondaryBrush}" />
+                                        <TextBlock Text="{x:Bind Title}" FontSize="12" Foreground="{ThemeResource SimFlowTextSecondaryBrush}" TextTrimming="CharacterEllipsis" />
                                         <StackPanel Orientation="Horizontal" Spacing="7">
                                             <TextBlock Text="{x:Bind Count}" FontSize="25" FontWeight="SemiBold" Foreground="{ThemeResource SimFlowTextPrimaryBrush}" />
                                             <!-- 同比只在能真实算出上一年的同口径区间时显示 -->
@@ -117,7 +117,7 @@
                                                        Foreground="{Binding TrendColor, Converter={StaticResource HexBrushConverter}}"
                                                        Visibility="{Binding HasTrend, Converter={StaticResource BoolToVisibilityConverter}}" />
                                         </StackPanel>
-                                        <TextBlock Text="{x:Bind Footnote}" FontSize="11" Foreground="{ThemeResource SimFlowMutedBrush}" TextTrimming="CharacterEllipsis" />
+                                        <TextBlock Text="{x:Bind Footnote}" FontSize="11" Foreground="{ThemeResource SimFlowMutedBrush}" TextWrapping="Wrap" MaxLines="2" />
                                     </StackPanel>
                                 </Grid>
                             </Border>

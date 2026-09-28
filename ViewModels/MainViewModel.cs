@@ -9,6 +9,8 @@ namespace SimFlow.ViewModels;
 
 public sealed partial class MainViewModel(
     IProjectService projectService,
+    IProjectRecoveryService recoveryService,
+    IProjectScannerService scanner,
     IStorageLocationService storage,
     IConfigurationService configuration,
     IProjectMigrationService migrationService) : ObservableObject
@@ -16,7 +18,12 @@ public sealed partial class MainViewModel(
     private List<ProjectRecord> _allProjects = [];
     private List<string> _allTags = [];
     private readonly Dictionary<StorageLocationCode, bool> _locationAvailability = [];
+    private readonly HashSet<string> _tagFilters = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> _softwareFilters = new(StringComparer.OrdinalIgnoreCase);
     private int _detailsRequest;
+    private string? _requesterFilter;
+    private SimulationType? _simulationTypeFilter;
+    private bool _filterUnclassified;
 
     public ObservableCollection<ProjectCardViewModel> Projects { get; } = [];
     public ObservableCollection<ProjectCardViewModel> NotStartedProjects { get; } = [];
@@ -28,12 +35,34 @@ public sealed partial class MainViewModel(
     public ObservableCollection<SoftwareConfiguration> SoftwareList { get; } = [];
     public ObservableCollection<ProjectVersionRecord> Versions { get; } = [];
     public ObservableCollection<ProjectActivityRecord> Activities { get; } = [];
+    public ObservableCollection<RecoveryProjectItem> RecoveryItems { get; } = [];
 
     /// <summary>所有项目出现过的标签，供标签编辑器做“点击加入”的候选。</summary>
     public IReadOnlyList<string> AllTags => _allTags;
 
     /// <summary>当前全部项目（含被筛选隐藏的），供设置页做目录复制时统计。</summary>
     public IReadOnlyList<ProjectRecord> AllProjects => _allProjects;
+    public IReadOnlyCollection<string> SelectedTagFilters => _tagFilters;
+    public IReadOnlyCollection<string> SelectedSoftwareFilters => _softwareFilters;
+    public string? RequesterFilter => _requesterFilter;
+    public SimulationType? SimulationTypeFilter => _simulationTypeFilter;
+    public bool FilterUnclassified => _filterUnclassified;
+    public bool HasAdvancedFilters => AdvancedFilterCount > 0;
+    public int AdvancedFilterCount => (_requesterFilter is null ? 0 : 1) + (_simulationTypeFilter is null && !_filterUnclassified ? 0 : 1)
+        + (_tagFilters.Count > 0 ? 1 : 0) + (_softwareFilters.Count > 0 ? 1 : 0);
+    public int RecycleBinCount => RecoveryItems.Count;
+    public bool HasRecoveryItems => RecoveryItems.Count > 0;
+
+    public IReadOnlyList<string> RequesterFilterOptions => _allProjects
+        .Select(project => project.Requester.Trim())
+        .Where(value => value.Length > 0)
+        .Distinct(StringComparer.OrdinalIgnoreCase)
+        .OrderBy(value => value, StringComparer.CurrentCultureIgnoreCase)
+        .ToList();
+    public IReadOnlyList<string> TagFilterOptions => _allProjects.SelectMany(project => project.Tags)
+        .Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(value => value, StringComparer.CurrentCultureIgnoreCase).ToList();
+    public IReadOnlyList<string> SoftwareFilterOptions => _allProjects.SelectMany(project => project.Software)
+        .Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(value => value, StringComparer.CurrentCultureIgnoreCase).ToList();
 
     [ObservableProperty]
     public partial ProjectCardViewModel? SelectedProject { get; set; }
@@ -59,8 +88,11 @@ public sealed partial class MainViewModel(
     [ObservableProperty]
     public partial bool IsStatistics { get; set; }
 
+    [ObservableProperty]
+    public partial bool IsRecycleBin { get; set; }
+
     /// <summary>非首页、非设置、非统计页时显示项目列表。</summary>
-    public bool ShowProjectList => !IsHome && !IsSettings && !IsStatistics;
+    public bool ShowProjectList => !IsHome && !IsSettings && !IsStatistics && !IsRecycleBin;
 
     [ObservableProperty]
     public partial string CurrentSectionTitle { get; set; } = "项目列表";
@@ -101,6 +133,7 @@ public sealed partial class MainViewModel(
             await projectService.RetryPendingMetadataAsync(cancellationToken);
             await RefreshStorageAvailabilityAsync(cancellationToken);
             await RefreshAsync(cancellationToken);
+            await RefreshRecoveryItemsAsync(cancellationToken);
             RefreshSoftwareList();
         }
         finally
@@ -123,7 +156,7 @@ public sealed partial class MainViewModel(
         OnPropertyChanged(nameof(TotalProjectCount));
         // 首页是看板、统计页有自己的内容：都不自动选中项目，让“点一下才出详情”这件事一眼可见。
         // 其余页面保留自动选中首个项目的习惯。
-        var fallback = IsHome || IsStatistics ? null : Projects.FirstOrDefault();
+        var fallback = IsHome || IsStatistics || IsRecycleBin ? null : Projects.FirstOrDefault();
         var restored = selectedCode is null
             ? null
             : Projects.FirstOrDefault(item => item.Project.ProjectCode == selectedCode);
@@ -149,6 +182,7 @@ public sealed partial class MainViewModel(
         IsHome = string.Equals(key, "home", StringComparison.Ordinal);
         IsSettings = string.Equals(key, "settings", StringComparison.Ordinal);
         IsStatistics = string.Equals(key, "statistics", StringComparison.Ordinal);
+        IsRecycleBin = string.Equals(key, "recyclebin", StringComparison.Ordinal);
         OnPropertyChanged(nameof(ShowProjectList));
         CurrentSectionTitle = key switch
         {
@@ -161,6 +195,7 @@ public sealed partial class MainViewModel(
             "favorite" => "收藏项目",
             "archived" => "已归档",
             "statistics" => "统计分析",
+            "recyclebin" => "回收站",
             "settings" => "设置",
             _ => "项目列表"
         };
@@ -170,6 +205,10 @@ public sealed partial class MainViewModel(
         if (IsSettings)
         {
             _ = RefreshTagSummaryAsync(CancellationToken.None);
+        }
+        if (IsRecycleBin)
+        {
+            _ = RefreshRecoveryItemsAsync(CancellationToken.None);
         }
     }
 
@@ -183,6 +222,81 @@ public sealed partial class MainViewModel(
     {
         SortMode = mode;
         ApplyFilter();
+    }
+
+    public void SetRequesterFilter(string? requester)
+    {
+        _requesterFilter = requester;
+        NotifyAdvancedFilterChanged();
+    }
+
+    public void SetSimulationTypeFilter(SimulationType? simulationType, bool unclassified = false)
+    {
+        _simulationTypeFilter = simulationType;
+        _filterUnclassified = unclassified;
+        NotifyAdvancedFilterChanged();
+    }
+
+    public void SetTagFilters(IEnumerable<string> tags)
+    {
+        _tagFilters.Clear();
+        _tagFilters.UnionWith(tags.Where(value => !string.IsNullOrWhiteSpace(value)).Select(value => value.Trim()));
+        NotifyAdvancedFilterChanged();
+    }
+
+    public void SetSoftwareFilters(IEnumerable<string> software)
+    {
+        _softwareFilters.Clear();
+        _softwareFilters.UnionWith(software.Where(value => !string.IsNullOrWhiteSpace(value)).Select(value => value.Trim()));
+        NotifyAdvancedFilterChanged();
+    }
+
+    public void ClearAdvancedFilters()
+    {
+        _requesterFilter = null;
+        _simulationTypeFilter = null;
+        _filterUnclassified = false;
+        _tagFilters.Clear();
+        _softwareFilters.Clear();
+        NotifyAdvancedFilterChanged();
+    }
+
+    private void NotifyAdvancedFilterChanged()
+    {
+        OnPropertyChanged(nameof(RequesterFilter));
+        OnPropertyChanged(nameof(SimulationTypeFilter));
+        OnPropertyChanged(nameof(FilterUnclassified));
+        OnPropertyChanged(nameof(SelectedTagFilters));
+        OnPropertyChanged(nameof(SelectedSoftwareFilters));
+        OnPropertyChanged(nameof(AdvancedFilterCount));
+        OnPropertyChanged(nameof(HasAdvancedFilters));
+        ApplyFilter();
+    }
+
+    public async Task RefreshRecoveryItemsAsync(CancellationToken cancellationToken = default)
+    {
+        var items = await recoveryService.GetItemsAsync(cancellationToken);
+        RecoveryItems.Clear();
+        foreach (var item in items) RecoveryItems.Add(item);
+        OnPropertyChanged(nameof(RecycleBinCount));
+        OnPropertyChanged(nameof(HasRecoveryItems));
+    }
+
+    public async Task RestoreRecoveryItemAsync(RecoveryProjectItem item, CancellationToken cancellationToken = default)
+    {
+        await recoveryService.RestoreAsync(item, cancellationToken);
+        // 恢复服务已重建项目主记录；扫描负责把磁盘上的其余版本记录补齐。
+        await scanner.ScanAsync(CancellationToken.None);
+        await RefreshAsync(CancellationToken.None);
+        await RefreshRecoveryItemsAsync(CancellationToken.None);
+        StatusMessage = $"已恢复项目 {item.ProjectCode}";
+    }
+
+    public async Task PermanentlyDeleteRecoveryItemAsync(RecoveryProjectItem item, CancellationToken cancellationToken = default)
+    {
+        await recoveryService.PermanentlyDeleteAsync(item, cancellationToken);
+        await RefreshRecoveryItemsAsync(CancellationToken.None);
+        StatusMessage = $"已彻底删除 {item.ProjectCode}";
     }
 
     public async Task<ProjectRecord> CreateProjectAsync(CreateProjectRequest request, CancellationToken cancellationToken = default)
@@ -496,6 +610,28 @@ public sealed partial class MainViewModel(
             "archived" => query.Where(project => project.StorageStatus == StorageStatus.Archived),
             _ => query
         };
+        if (_requesterFilter is not null)
+        {
+            query = _requesterFilter.Length == 0
+                ? query.Where(project => string.IsNullOrWhiteSpace(project.Requester))
+                : query.Where(project => string.Equals(project.Requester.Trim(), _requesterFilter, StringComparison.CurrentCultureIgnoreCase));
+        }
+        if (_filterUnclassified)
+        {
+            query = query.Where(project => project.SimulationType is null);
+        }
+        else if (_simulationTypeFilter is { } simulationType)
+        {
+            query = query.Where(project => project.SimulationType == simulationType);
+        }
+        if (_tagFilters.Count > 0)
+        {
+            query = query.Where(project => project.Tags.Any(tag => _tagFilters.Contains(tag)));
+        }
+        if (_softwareFilters.Count > 0)
+        {
+            query = query.Where(project => project.Software.Any(software => _softwareFilters.Contains(software)));
+        }
         if (!string.IsNullOrWhiteSpace(SearchText))
         {
             var search = SearchText.Trim();

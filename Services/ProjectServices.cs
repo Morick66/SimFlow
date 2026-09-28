@@ -837,6 +837,183 @@ public sealed class ProjectService(
         .ToList();
 }
 
+public sealed class ProjectRecoveryService(
+    IProjectRepository repository,
+    IProjectMetadataStore metadataStore,
+    IStorageLocationService storage,
+    ILogger<ProjectRecoveryService> logger) : IProjectRecoveryService
+{
+    private const string RecoveryDirectoryName = ".simflow-recovery";
+    private const string ProjectsCategory = "Projects";
+
+    public async Task<IReadOnlyList<RecoveryProjectItem>> GetItemsAsync(CancellationToken cancellationToken = default)
+    {
+        var items = new List<RecoveryProjectItem>();
+        foreach (var location in Enum.GetValues<StorageLocationCode>())
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var root = storage.ResolveRoot(location);
+            if (string.IsNullOrWhiteSpace(root)) continue;
+            var area = Path.Combine(root, RecoveryDirectoryName, ProjectsCategory);
+            if (!Directory.Exists(area)) continue;
+
+            IReadOnlyList<string> directories;
+            try
+            {
+                directories = Directory.EnumerateDirectories(area).ToList();
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                logger.LogWarning(ex, "无法读取项目回收区 {RecoveryArea}", area);
+                continue;
+            }
+
+            foreach (var directory in directories)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                items.Add(await ReadItemAsync(directory, location, cancellationToken));
+            }
+        }
+
+        return items.OrderByDescending(item => item.DeletedAt).ThenBy(item => item.ProjectCode).ToList();
+    }
+
+    public async Task RestoreAsync(RecoveryProjectItem item, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+        ValidateRecoveryPath(item);
+        if (!Directory.Exists(item.RecoveryPath))
+            throw new DirectoryNotFoundException($"回收项目已不存在：{item.RecoveryPath}");
+
+        var metadataPath = Path.Combine(item.RecoveryPath, "project.json");
+        var metadata = await metadataStore.ReadProjectAsync(metadataPath, cancellationToken)
+            ?? throw new InvalidOperationException("回收项目缺少有效的 project.json，无法安全恢复。");
+        if (await repository.GetByCodeAsync(metadata.Id, cancellationToken) is not null)
+            throw new InvalidOperationException($"项目编号 {metadata.Id} 已存在，请先处理编号冲突。");
+
+        var project = metadata.ToProject();
+        var destination = storage.ResolveProjectPath(project);
+        if (!DirectoryVerification.PathsEqual(destination, item.OriginalPath))
+            throw new InvalidOperationException("项目的原始位置已经变化，请刷新回收站后重试。");
+        if (Directory.Exists(destination) || File.Exists(destination))
+            throw new IOException($"原位置已被占用，未执行恢复：{destination}");
+
+        Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+        Directory.Move(item.RecoveryPath, destination);
+        try
+        {
+            var imported = await repository.ImportAsync(project, new ProjectActivityRecord
+            {
+                ActivityType = ActivityTypes.ProjectRestored,
+                Description = "从项目回收站恢复",
+                CreatedAt = DateTimeOffset.Now
+            }, CancellationToken.None);
+            if (!imported)
+                throw new InvalidOperationException($"项目编号 {metadata.Id} 已存在，数据库未接受恢复记录。");
+        }
+        catch
+        {
+            if (Directory.Exists(destination) && !Directory.Exists(item.RecoveryPath))
+                Directory.Move(destination, item.RecoveryPath);
+            throw;
+        }
+
+        logger.LogInformation("项目 {ProjectCode} 已从回收站恢复到 {Destination}", metadata.Id, destination);
+    }
+
+    public Task PermanentlyDeleteAsync(RecoveryProjectItem item, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+        ValidateRecoveryPath(item);
+        cancellationToken.ThrowIfCancellationRequested();
+        // 从真正开始物理删除后不再响应取消，避免向用户报告“已取消”但目录只删了一半。
+        DirectoryVerification.DeleteVerifiedTree(item.RecoveryPath);
+        logger.LogInformation("回收项目 {ProjectCode} 已被彻底删除", item.ProjectCode);
+        return Task.CompletedTask;
+    }
+
+    private async Task<RecoveryProjectItem> ReadItemAsync(string directory, StorageLocationCode location, CancellationToken cancellationToken)
+    {
+        var folderName = Path.GetFileName(directory);
+        var fallbackCode = folderName.Split('.', 2)[0];
+        var deletedAt = ParseDeletedAt(folderName);
+        try
+        {
+            var metadata = await metadataStore.ReadProjectAsync(Path.Combine(directory, "project.json"), cancellationToken)
+                ?? throw new InvalidDataException("缺少有效的 project.json");
+            if (string.IsNullOrWhiteSpace(metadata.Id) || string.IsNullOrWhiteSpace(metadata.Name))
+                throw new InvalidDataException("project.json 缺少项目编号或名称");
+            var project = metadata.ToProject();
+            if (project.StorageLocation != location)
+                throw new InvalidDataException("项目档案中的存储位置与回收区不一致");
+            var (fileCount, totalBytes) = await Task.Run(() => MeasureDirectory(directory, cancellationToken), cancellationToken);
+            return new RecoveryProjectItem
+            {
+                RecoveryPath = directory,
+                ProjectCode = metadata.Id,
+                ProjectName = metadata.Name,
+                OriginalPath = storage.ResolveProjectPath(project),
+                StorageLocation = location,
+                DeletedAt = deletedAt,
+                FileCount = fileCount,
+                TotalBytes = totalBytes
+            };
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException or InvalidOperationException)
+        {
+            logger.LogWarning(ex, "回收项目 {RecoveryPath} 无法完整读取", directory);
+            return new RecoveryProjectItem
+            {
+                RecoveryPath = directory,
+                ProjectCode = fallbackCode,
+                ProjectName = fallbackCode,
+                OriginalPath = string.Empty,
+                StorageLocation = location,
+                DeletedAt = deletedAt,
+                Error = ex.Message
+            };
+        }
+    }
+
+    private void ValidateRecoveryPath(RecoveryProjectItem item)
+    {
+        var root = storage.ResolveRoot(item.StorageLocation);
+        if (string.IsNullOrWhiteSpace(root))
+            throw new InvalidOperationException($"尚未配置 {item.StorageText} 路径。");
+        var area = Path.GetFullPath(Path.Combine(root, RecoveryDirectoryName, ProjectsCategory));
+        var candidate = Path.GetFullPath(item.RecoveryPath);
+        var relative = Path.GetRelativePath(area, candidate);
+        if (relative == "." || Path.IsPathRooted(relative) || relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal) || relative == "..")
+            throw new InvalidOperationException("回收项目路径超出 SimFlow 项目回收区，已拒绝操作。");
+        if (relative.Contains(Path.DirectorySeparatorChar) || relative.Contains(Path.AltDirectorySeparatorChar))
+            throw new InvalidOperationException("回收项目必须是项目回收区的直接子目录。");
+    }
+
+    private static (long FileCount, long TotalBytes) MeasureDirectory(string directory, CancellationToken cancellationToken)
+    {
+        long count = 0;
+        long bytes = 0;
+        foreach (var path in Directory.EnumerateFiles(directory, "*", SearchOption.AllDirectories))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var info = new FileInfo(path);
+            count++;
+            bytes += info.Length;
+        }
+        return (count, bytes);
+    }
+
+    private static DateTimeOffset ParseDeletedAt(string folderName)
+    {
+        var parts = folderName.Split('.');
+        if (parts.Length >= 3 && DateTime.TryParseExact(parts[^2], "yyyyMMddHHmmss",
+                System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.AssumeLocal, out var value))
+            return new DateTimeOffset(value);
+        return default;
+    }
+}
+
 public sealed class ProjectScannerService(
     IProjectRepository repository,
     IProjectMetadataStore metadataStore,

@@ -43,6 +43,7 @@ namespace SimFlow
             services.AddSingleton<IProjectMetadataStore, ProjectMetadataStore>();
             services.AddSingleton<IStorageLocationService, StorageLocationService>();
             services.AddSingleton<IProjectService, ProjectService>();
+            services.AddSingleton<IProjectRecoveryService, ProjectRecoveryService>();
             services.AddSingleton<IProjectMigrationService, ProjectMigrationService>();
             services.AddSingleton<ISimulationReportService, SimulationReportService>();
             services.AddSingleton<IProjectScannerService, ProjectScannerService>();

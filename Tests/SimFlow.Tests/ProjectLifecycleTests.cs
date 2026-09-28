@@ -12,6 +12,7 @@ public sealed class ProjectLifecycleTests : IAsyncLifetime
     private IProjectService _projects = null!;
     private IProjectScannerService _scanner = null!;
     private IProjectMigrationService _migration = null!;
+    private IProjectRecoveryService _recovery = null!;
     private IProjectRepository _repository = null!;
     private IConfigurationService _configuration = null!;
     private DatabaseService _database = null!;
@@ -63,6 +64,7 @@ public sealed class ProjectLifecycleTests : IAsyncLifetime
         var metadata = new ProjectMetadataStore(NullLogger<ProjectMetadataStore>.Instance);
         var storage = new StorageLocationService(_configuration);
         _projects = new ProjectService(_repository, metadata, storage, NullLogger<ProjectService>.Instance);
+        _recovery = new ProjectRecoveryService(_repository, metadata, storage, NullLogger<ProjectRecoveryService>.Instance);
         _scanner = new ProjectScannerService(_repository, metadata, storage, NullLogger<ProjectScannerService>.Instance);
         _migration = new ProjectMigrationService(_repository, metadata, storage, _configuration,
             NullLogger<ProjectMigrationService>.Instance);
@@ -1413,6 +1415,55 @@ public sealed class ProjectLifecycleTests : IAsyncLifetime
         Assert.Equal(0, scan.ImportedProjects);
         Assert.Null(await _repository.GetByCodeAsync(project.ProjectCode));
         Assert.Single(Directory.GetDirectories(Path.Combine(LocalWorkRoot, ".simflow-recovery", "Projects")));
+    }
+
+    [Fact]
+    public async Task ProjectRecovery_RestoresDirectoryAndDatabaseRecord()
+    {
+        var project = await _projects.CreateAsync(new CreateProjectRequest
+        {
+            Name = "待恢复项目",
+            Requester = "张工",
+            Tags = ["恢复测试"],
+            Software = ["Adams"]
+        });
+        var originalPath = Path.Combine(LocalWorkRoot, project.ProjectCode);
+        await File.WriteAllTextAsync(Path.Combine(originalPath, "Documents", "request.txt"), "keep me");
+        await _projects.DeleteAsync(project, deleteDirectory: true);
+
+        var item = Assert.Single(await _recovery.GetItemsAsync());
+        Assert.Equal(project.ProjectCode, item.ProjectCode);
+        Assert.Equal(originalPath, item.OriginalPath);
+        Assert.True(item.CanRestore);
+        Assert.True(item.FileCount >= 3);
+
+        await _recovery.RestoreAsync(item);
+
+        Assert.True(Directory.Exists(originalPath));
+        Assert.True(File.Exists(Path.Combine(originalPath, "Documents", "request.txt")));
+        var restored = await _repository.GetByCodeAsync(project.ProjectCode);
+        Assert.NotNull(restored);
+        Assert.Equal("待恢复项目", restored.Name);
+        Assert.Empty(await _recovery.GetItemsAsync());
+    }
+
+    [Fact]
+    public async Task ProjectRecovery_RejectsOccupiedDestinationAndCanPermanentlyDelete()
+    {
+        var project = await _projects.CreateAsync(new CreateProjectRequest { Name = "彻底删除测试" });
+        var originalPath = Path.Combine(LocalWorkRoot, project.ProjectCode);
+        await _projects.DeleteAsync(project, deleteDirectory: true);
+        var item = Assert.Single(await _recovery.GetItemsAsync());
+        Directory.CreateDirectory(originalPath);
+
+        await Assert.ThrowsAsync<IOException>(() => _recovery.RestoreAsync(item));
+        Assert.True(Directory.Exists(item.RecoveryPath));
+        Directory.Delete(originalPath);
+
+        await _recovery.PermanentlyDeleteAsync(item);
+        Assert.False(Directory.Exists(item.RecoveryPath));
+        Assert.Null(await _repository.GetByCodeAsync(project.ProjectCode));
+        Assert.Empty(await _recovery.GetItemsAsync());
     }
 
     /// <summary>目录已被移动/删除（断链）时仍应能删除记录：删除不依赖目录存在。</summary>

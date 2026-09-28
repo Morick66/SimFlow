@@ -218,6 +218,49 @@ public sealed class UpdateProjectInfoRequest
     public IReadOnlyList<string> Software { get; init; } = [];
 }
 
+/// <summary>
+/// 项目回收站中的一个可恢复目录。回收站只管理由 SimFlow 删除项目时移动到
+/// <c>.simflow-recovery/Projects</c> 的目录，不把迁移暂存或版本恢复目录混进来。
+/// </summary>
+public sealed class RecoveryProjectItem
+{
+    public required string RecoveryPath { get; init; }
+    public required string ProjectCode { get; init; }
+    public required string ProjectName { get; init; }
+    public required string OriginalPath { get; init; }
+    public StorageLocationCode StorageLocation { get; init; }
+    public DateTimeOffset DeletedAt { get; init; }
+    public long FileCount { get; init; }
+    public long TotalBytes { get; init; }
+    public string Error { get; init; } = string.Empty;
+
+    public bool CanRestore => string.IsNullOrWhiteSpace(Error);
+    public string DeletedAtText => DeletedAt == default ? "删除时间未知" : DeletedAt.ToString("yyyy-MM-dd HH:mm");
+    public string StorageText => StorageLocation switch
+    {
+        StorageLocationCode.LocalWork => "本机 Work",
+        StorageLocationCode.WorkstationWork => "工作站 Work",
+        StorageLocationCode.WorkstationArchive => "工作站 Archive",
+        _ => "未知位置"
+    };
+    public string SizeText => FormatBytes(TotalBytes);
+    public string SummaryText => $"{FileCount:N0} 个文件 · {SizeText} · {StorageText}";
+
+    private static string FormatBytes(long bytes)
+    {
+        string[] units = ["B", "KB", "MB", "GB", "TB"];
+        var value = (double)Math.Max(0, bytes);
+        var unit = 0;
+        while (value >= 1024 && unit < units.Length - 1)
+        {
+            value /= 1024;
+            unit++;
+        }
+
+        return unit == 0 ? $"{value:0} {units[unit]}" : $"{value:0.#} {units[unit]}";
+    }
+}
+
 public sealed class ProjectMetadataDocument
 {
     public int SchemaVersion { get; init; } = 1;

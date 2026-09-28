@@ -154,6 +154,26 @@
                     <Button Grid.Column="3" Content="移除候选" Click="SoftwareDelete_Click" VerticalAlignment="Center" FontSize="12" />
                 </Grid>
             </DataTemplate>
+            <DataTemplate x:Key="RecoveryProjectRowTemplate" x:DataType="models:RecoveryProjectItem">
+                <Grid Padding="14,12" ColumnSpacing="14">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="44" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                    <Border Width="42" Height="42" CornerRadius="10" Background="{ThemeResource SimFlowSurfaceSubtleBrush}" VerticalAlignment="Top">
+                        <FontIcon Glyph="&#xE74D;" FontSize="20" Foreground="{ThemeResource SimFlowMutedBrush}" />
+                    </Border>
+                    <StackPanel Grid.Column="1" Spacing="3">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <TextBlock Text="{x:Bind ProjectName}" FontSize="15" FontWeight="SemiBold" Foreground="{ThemeResource SimFlowTextPrimaryBrush}" TextTrimming="CharacterEllipsis" />
+                            <TextBlock Text="{x:Bind ProjectCode}" FontSize="12" Foreground="{ThemeResource SimFlowMutedBrush}" VerticalAlignment="Center" />
+                        </StackPanel>
+                        <TextBlock Text="{x:Bind SummaryText}" FontSize="12" Foreground="{ThemeResource SimFlowTextSecondaryBrush}" />
+                        <TextBlock Text="{x:Bind DeletedAtText}" FontSize="12" Foreground="{ThemeResource SimFlowMutedBrush}" />
+                        <TextBlock Text="{x:Bind OriginalPath}" FontSize="11" Foreground="{ThemeResource SimFlowMutedBrush}" TextTrimming="CharacterEllipsis" ToolTipService.ToolTip="{x:Bind OriginalPath}" />
+                        <TextBlock Text="{x:Bind Error}" FontSize="11" Foreground="#B42318" TextWrapping="Wrap" />
+                    </StackPanel>
+                    <Button Grid.Column="2" Content="恢复" Click="RestoreRecoveryProject_Click" IsEnabled="{x:Bind CanRestore}" Style="{StaticResource PrimaryButtonStyle}" VerticalAlignment="Center" />
+                    <Button Grid.Column="3" Content="彻底删除" Click="PermanentlyDeleteRecoveryProject_Click" Style="{StaticResource SecondaryButtonStyle}" Foreground="#B42318" VerticalAlignment="Center" />
+                </Grid>
+            </DataTemplate>
         </Grid.Resources>
         <NavigationView x:Name="MainNavigation"
                         IsBackButtonVisible="Collapsed"
@@ -188,6 +208,15 @@
                         <Grid ColumnSpacing="8"><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
                             <TextBlock Text="收藏" VerticalAlignment="Center" />
                             <Border Grid.Column="1" Background="{ThemeResource SimFlowSurfaceSubtleBrush}" CornerRadius="9" Padding="7,1"><TextBlock Text="{x:Bind ViewModel.FavoriteProjectCount, Mode=OneWay}" FontSize="11" Foreground="{ThemeResource SimFlowMutedBrush}" /></Border>
+                        </Grid>
+                    </NavigationViewItem.Content>
+                </NavigationViewItem>
+                <NavigationViewItem Tag="recyclebin">
+                    <NavigationViewItem.Icon><FontIcon Glyph="&#xE74D;" /></NavigationViewItem.Icon>
+                    <NavigationViewItem.Content>
+                        <Grid ColumnSpacing="8"><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                            <TextBlock Text="回收站" VerticalAlignment="Center" />
+                            <Border Grid.Column="1" Background="{ThemeResource SimFlowSurfaceSubtleBrush}" CornerRadius="9" Padding="7,1"><TextBlock Text="{x:Bind ViewModel.RecycleBinCount, Mode=OneWay}" FontSize="11" Foreground="{ThemeResource SimFlowMutedBrush}" /></Border>
                         </Grid>
                     </NavigationViewItem.Content>
                 </NavigationViewItem>
@@ -226,17 +255,17 @@
                     <Grid Grid.Column="0">
                         <!-- 统计卡片只在首页显示，其余页面不占这行 -->
                         <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition x:Name="SectionHeaderRow" Height="56" /><RowDefinition Height="*" /></Grid.RowDefinitions>
-                        <ItemsControl x:Name="StatsRow" ItemsSource="{x:Bind ViewModel.Stats, Mode=OneWay}" Height="120">
+                        <ItemsControl x:Name="StatsRow" ItemsSource="{x:Bind ViewModel.Stats, Mode=OneWay}" Height="94" VerticalAlignment="Top">
                             <ItemsControl.ItemsPanel><ItemsPanelTemplate><ItemsStackPanel Orientation="Horizontal" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate x:DataType="viewModels:StatCardViewModel">
                                     <!-- Button 原生支持 Tab、Enter、Space 与 UI Automation；内层卡片保留原视觉。 -->
-                                    <Button Width="164" Height="106" Margin="0,0,16,0" Padding="0"
+                                    <Button Width="164" Height="86" Margin="0,0,16,0" Padding="0"
                                             Background="Transparent" BorderThickness="0"
                                             HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch"
                                             Click="StatCard_Click"
                                             AutomationProperties.Name="{x:Bind AutomationName}">
-                                        <Border Style="{StaticResource CardBorderStyle}" Padding="12">
+                                        <Border Style="{StaticResource CardBorderStyle}" Padding="10">
                                             <Grid ColumnSpacing="10">
                                                 <Grid.ColumnDefinitions><ColumnDefinition Width="44" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
                                                 <Border Width="44" Height="44" CornerRadius="10" Background="{Binding IconBackground, Converter={StaticResource HexBrushConverter}}">
@@ -368,7 +397,7 @@
                             <!-- 主题筛选页：完整列表 -->
                             <Border x:Name="ProjectListPanel" Style="{StaticResource CardBorderStyle}" Padding="0">
                                 <Grid>
-                                    <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+                                    <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
                                     <!-- 筛选胶囊随可用宽度换行，保留原有单选组与事件。 -->
                                     <VariableSizedWrapGrid Grid.Row="0" Orientation="Horizontal" ItemWidth="100" ItemHeight="44" Margin="16,14,8,4">
                                         <RadioButton x:Name="ListFilterAll" Content="全部" Tag="all" GroupName="ListFilter" Style="{StaticResource FilterChipRadioStyle}" Checked="ListFilter_Checked" />
@@ -379,7 +408,16 @@
                                         <RadioButton x:Name="ListFilterArchived" Content="已归档" Tag="archived" GroupName="ListFilter" Style="{StaticResource FilterChipRadioStyle}" Checked="ListFilter_Checked" />
                                         <RadioButton x:Name="ListFilterFavorite" Content="收藏" Tag="favorite" GroupName="ListFilter" Style="{StaticResource FilterChipRadioStyle}" Checked="ListFilter_Checked" />
                                     </VariableSizedWrapGrid>
-                                    <Grid Grid.Row="1">
+                                    <!-- 多维筛选：不同维度取交集；标签/软件在各自维度内匹配任一选中项。 -->
+                                    <VariableSizedWrapGrid Grid.Row="1" Orientation="Horizontal" Margin="16,2,10,10">
+                                        <TextBlock Text="筛选" FontSize="12" FontWeight="SemiBold" Foreground="{ThemeResource SimFlowTextSecondaryBrush}" VerticalAlignment="Center" Margin="0,0,10,6" />
+                                        <ComboBox x:Name="RequesterFilterCombo" MinWidth="150" PlaceholderText="全部需求人" SelectionChanged="RequesterFilter_SelectionChanged" Margin="0,0,8,6" />
+                                        <ComboBox x:Name="SimulationTypeFilterCombo" MinWidth="150" PlaceholderText="全部仿真类型" SelectionChanged="SimulationTypeFilter_SelectionChanged" Margin="0,0,8,6" />
+                                        <Button x:Name="TagFilterButton" Content="标签：全部" Click="TagFilter_Click" Style="{StaticResource SecondaryButtonStyle}" Margin="0,0,8,6" />
+                                        <Button x:Name="SoftwareFilterButton" Content="软件：全部" Click="SoftwareFilter_Click" Style="{StaticResource SecondaryButtonStyle}" Margin="0,0,8,6" />
+                                        <Button x:Name="ClearAdvancedFiltersButton" Content="清除筛选" Click="ClearAdvancedFilters_Click" Style="{StaticResource SecondaryButtonStyle}" Margin="0,0,8,6" IsEnabled="{x:Bind ViewModel.HasAdvancedFilters, Mode=OneWay}" />
+                                    </VariableSizedWrapGrid>
+                                    <Grid Grid.Row="2">
                                         <ListView x:Name="ProjectList" ItemsSource="{x:Bind ViewModel.Projects, Mode=OneWay}" SelectedItem="{x:Bind ViewModel.SelectedProject, Mode=OneWay}" SelectionMode="Single" IsItemClickEnabled="True" ItemClick="ProjectList_ItemClick" ItemTemplate="{StaticResource ProjectRowTemplate}">
                                             <ListView.ItemContainerStyle>
                                                 <Style TargetType="ListViewItem"><Setter Property="HorizontalContentAlignment" Value="Stretch" /><Setter Property="Padding" Value="0" /><Setter Property="MinHeight" Value="88" /><Setter Property="CornerRadius" Value="8" /><Setter Property="Margin" Value="5,2" /></Style>
@@ -390,6 +428,31 @@
                                             <TextBlock Text="还没有符合条件的项目" FontSize="16" FontWeight="SemiBold" Foreground="{ThemeResource SimFlowTextPrimaryBrush}" HorizontalAlignment="Center" />
                                             <TextBlock Text="新建项目或调整筛选条件后，项目会显示在这里。" FontSize="13" Foreground="{ThemeResource SimFlowMutedBrush}" HorizontalAlignment="Center" />
                                             <Button Content="新建第一个项目" Style="{StaticResource PrimaryButtonStyle}" Click="NewProject_Click" HorizontalAlignment="Center" />
+                                        </StackPanel>
+                                    </Grid>
+                                </Grid>
+                            </Border>
+
+                            <!-- 基础项目回收站：只管理正常删除项目产生的 .simflow-recovery/Projects。 -->
+                            <Border x:Name="RecycleBinPanel" Style="{StaticResource CardBorderStyle}" Padding="0" Visibility="Collapsed">
+                                <Grid>
+                                    <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+                                    <Grid Padding="20,16,16,12" ColumnSpacing="12">
+                                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                        <StackPanel Spacing="4">
+                                            <TextBlock Text="回收站" Style="{StaticResource PageTitleTextStyle}" />
+                                            <TextBlock Text="这里只显示删除项目时移入恢复区的项目。恢复不会覆盖已有目录；彻底删除后无法撤销。" Style="{StaticResource SecondaryTextStyle}" TextWrapping="Wrap" />
+                                        </StackPanel>
+                                        <Button Grid.Column="1" Content="刷新" Click="RefreshRecycleBin_Click" Style="{StaticResource SecondaryButtonStyle}" VerticalAlignment="Center" />
+                                    </Grid>
+                                    <Grid Grid.Row="1">
+                                        <ListView ItemsSource="{x:Bind ViewModel.RecoveryItems, Mode=OneWay}" ItemTemplate="{StaticResource RecoveryProjectRowTemplate}" SelectionMode="None">
+                                            <ListView.ItemContainerStyle><Style TargetType="ListViewItem"><Setter Property="HorizontalContentAlignment" Value="Stretch" /><Setter Property="Padding" Value="0" /><Setter Property="CornerRadius" Value="8" /><Setter Property="Margin" Value="6,2" /></Style></ListView.ItemContainerStyle>
+                                        </ListView>
+                                        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="10" Visibility="{x:Bind ViewModel.HasRecoveryItems, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}, ConverterParameter=Invert}">
+                                            <FontIcon Glyph="&#xE74D;" FontSize="38" Foreground="{ThemeResource SimFlowMutedBrush}" HorizontalAlignment="Center" />
+                                            <TextBlock Text="回收站为空" FontSize="16" FontWeight="SemiBold" Foreground="{ThemeResource SimFlowTextPrimaryBrush}" HorizontalAlignment="Center" />
+                                            <TextBlock Text="删除项目时选择移动文件夹后，可在这里恢复。" Style="{StaticResource SecondaryTextStyle}" />
                                         </StackPanel>
                                     </Grid>
                                 </Grid>

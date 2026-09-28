@@ -167,7 +167,7 @@
                         </StackPanel>
                         <TextBlock Text="{x:Bind SummaryText}" FontSize="12" Foreground="{ThemeResource SimFlowTextSecondaryBrush}" />
                         <TextBlock Text="{x:Bind DeletedAtText}" FontSize="12" Foreground="{ThemeResource SimFlowMutedBrush}" />
-                        <TextBlock Text="{x:Bind OriginalPath}" FontSize="11" Foreground="{ThemeResource SimFlowMutedBrush}" TextTrimming="CharacterEllipsis" ToolTipService.ToolTip="{x:Bind OriginalPath}" />
+                        <TextBlock Text="{x:Bind OriginalPath}" FontSize="11" Foreground="{ThemeResource SimFlowMutedBrush}" TextTrimming="CharacterEllipsis" />
                         <TextBlock Text="{x:Bind Error}" FontSize="11" Foreground="#B42318" TextWrapping="Wrap" />
                     </StackPanel>
                     <Button Grid.Column="2" Content="恢复" Click="RestoreRecoveryProject_Click" IsEnabled="{x:Bind CanRestore}" Style="{StaticResource PrimaryButtonStyle}" VerticalAlignment="Center" />

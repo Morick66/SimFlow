@@ -409,8 +409,7 @@
                                         <RadioButton x:Name="ListFilterFavorite" Content="收藏" Tag="favorite" GroupName="ListFilter" Style="{StaticResource FilterChipRadioStyle}" Checked="ListFilter_Checked" />
                                     </VariableSizedWrapGrid>
                                     <!-- 多维筛选：不同维度取交集；标签/软件在各自维度内匹配任一选中项。 -->
-                                    <VariableSizedWrapGrid Grid.Row="1" Orientation="Horizontal" Margin="16,2,10,10">
-                                        <TextBlock Text="筛选" FontSize="12" FontWeight="SemiBold" Foreground="{ThemeResource SimFlowTextSecondaryBrush}" VerticalAlignment="Center" Margin="0,0,10,6" />
+                                    <VariableSizedWrapGrid Grid.Row="1" Orientation="Horizontal" ItemWidth="166" ItemHeight="42" Margin="16,2,10,10">
                                         <ComboBox x:Name="RequesterFilterCombo" MinWidth="150" PlaceholderText="全部需求人" SelectionChanged="RequesterFilter_SelectionChanged" Margin="0,0,8,6" />
                                         <ComboBox x:Name="SimulationTypeFilterCombo" MinWidth="150" PlaceholderText="全部仿真类型" SelectionChanged="SimulationTypeFilter_SelectionChanged" Margin="0,0,8,6" />
                                         <Button x:Name="TagFilterButton" Content="标签：全部" Click="TagFilter_Click" Style="{StaticResource SecondaryButtonStyle}" Margin="0,0,8,6" />
@@ -449,7 +448,7 @@
                                         <ListView ItemsSource="{x:Bind ViewModel.RecoveryItems, Mode=OneWay}" ItemTemplate="{StaticResource RecoveryProjectRowTemplate}" SelectionMode="None">
                                             <ListView.ItemContainerStyle><Style TargetType="ListViewItem"><Setter Property="HorizontalContentAlignment" Value="Stretch" /><Setter Property="Padding" Value="0" /><Setter Property="CornerRadius" Value="8" /><Setter Property="Margin" Value="6,2" /></Style></ListView.ItemContainerStyle>
                                         </ListView>
-                                        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="10" Visibility="{x:Bind ViewModel.HasRecoveryItems, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}, ConverterParameter=Invert}">
+                                        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="10" Visibility="{Binding HasRecoveryItems, Converter={StaticResource BoolToVisibilityConverter}, ConverterParameter=Invert}">
                                             <FontIcon Glyph="&#xE74D;" FontSize="38" Foreground="{ThemeResource SimFlowMutedBrush}" HorizontalAlignment="Center" />
                                             <TextBlock Text="回收站为空" FontSize="16" FontWeight="SemiBold" Foreground="{ThemeResource SimFlowTextPrimaryBrush}" HorizontalAlignment="Center" />
                                             <TextBlock Text="删除项目时选择移动文件夹后，可在这里恢复。" Style="{StaticResource SecondaryTextStyle}" />

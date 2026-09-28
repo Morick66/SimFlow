@@ -24,8 +24,8 @@ internal sealed class TagEditor
 
     private readonly List<string> _tags = [];
     // 按对话框可用宽度自动换行，不再把标签塞进单行横向滚动区。
-    private readonly VariableSizedWrapGrid _chipPanel = new() { Orientation = Orientation.Horizontal };
-    private readonly VariableSizedWrapGrid _suggestionPanel = new() { Orientation = Orientation.Horizontal };
+    private readonly TagWrapPanel _chipPanel = new();
+    private readonly TagWrapPanel _suggestionPanel = new();
     private readonly TextBox _input;
     private readonly TextBlock _emptyHint;
     private readonly IReadOnlyList<string> _suggestions;

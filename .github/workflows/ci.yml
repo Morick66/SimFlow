@@ -35,16 +35,6 @@ jobs:
       - name: Build unsigned portable candidate
         run: dotnet publish SimFlow.csproj -c Release --no-restore -p:Platform=x64 -p:PublishProfile=win-x64-portable
 
-      - name: Show generated XAML context on build failure
-        if: failure()
-        shell: pwsh
-        run: |
-          $path = Get-ChildItem obj -Recurse -Filter MainWindow.g.cs | Select-Object -First 1 -ExpandProperty FullName
-          if ($path) {
-            $lines = Get-Content $path
-            4416..4432 | ForEach-Object { if ($_ -le $lines.Length) { "$_`: $($lines[$_ - 1])" } }
-          }
-
       - name: Verify portable branding assets
         shell: pwsh
         run: |

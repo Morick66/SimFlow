@@ -127,7 +127,7 @@
     <Style x:Key="FilterChipRadioStyle" TargetType="RadioButton" BasedOn="{StaticResource ChoiceRadioStyle}">
         <Setter Property="MinHeight" Value="36" />
         <Setter Property="Padding" Value="14,7" />
-        <Setter Property="Margin" Value="0,0,8,8" />
+        <Setter Property="Margin" Value="0,2,8,8" />
         <Setter Property="CornerRadius" Value="18" />
         <Setter Property="FontSize" Value="13" />
         <Setter Property="FontWeight" Value="SemiBold" />

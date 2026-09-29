@@ -407,7 +407,7 @@
                                                         AutomationProperties.Name="重置项目筛选" />
                                             </Grid>
                                             <TextBlock Text="项目状态" FontSize="12" FontWeight="SemiBold" Foreground="{ThemeResource SimFlowTextSecondaryBrush}" Margin="0,6,0,0" />
-                                            <VariableSizedWrapGrid Orientation="Horizontal" ItemWidth="100" ItemHeight="42">
+                                            <VariableSizedWrapGrid Orientation="Horizontal" ItemWidth="100" ItemHeight="50">
                                                 <RadioButton x:Name="ListFilterAll" Content="全部" Tag="all" GroupName="ListFilter" Style="{StaticResource FilterChipRadioStyle}" Checked="ListFilter_Checked" />
                                                 <RadioButton x:Name="ListFilterNotStarted" Content="未开始" Tag="notstarted" GroupName="ListFilter" Style="{StaticResource FilterChipRadioStyle}" Checked="ListFilter_Checked" />
                                                 <RadioButton x:Name="ListFilterActive" Content="进行中" Tag="active" GroupName="ListFilter" Style="{StaticResource FilterChipRadioStyle}" Checked="ListFilter_Checked" />

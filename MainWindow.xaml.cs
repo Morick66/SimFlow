@@ -115,9 +115,9 @@ public sealed partial class MainWindow : Window
 
     /// <summary>
     /// 首页统计卡片里没有独立一级导航入口的筛选键：点击后落到「所有项目」页并应用筛选。
-    /// “收藏”有自己的导航项，因此不在这里。
+    /// 收藏作为可叠加筛选，首页收藏统计卡也跳到所有项目。
     /// </summary>
-    private static readonly string[] PageFilterKeys = ["notstarted", "active", "waiting", "completed", "archived"];
+    private static readonly string[] PageFilterKeys = ["notstarted", "active", "waiting", "completed", "archived", "favorite"];
 
     /// <summary>首页统计卡片点击后要落到「所有项目」页的那个筛选键。</summary>
     private string? _pendingListFilter;
@@ -190,6 +190,7 @@ public sealed partial class MainWindow : Window
         KanbanBoard.Visibility = AsVisibility(ViewModel.IsHome);
         ProjectListPanel.Visibility = AsVisibility(ViewModel.ShowProjectList);
         ProjectListEmptyState.Visibility = AsVisibility(!ViewModel.HasProjects);
+        ProjectListEmptyAction.Content = ViewModel.TotalProjectCount == 0 ? "新建第一个项目" : "重置筛选";
         SettingsPanel.Visibility = AsVisibility(ViewModel.IsSettings);
         StatisticsPanel.Visibility = AsVisibility(ViewModel.IsStatistics);
         RecycleBinPanel.Visibility = AsVisibility(ViewModel.IsRecycleBin);
@@ -345,6 +346,7 @@ public sealed partial class MainWindow : Window
     {
         ViewModel.SetFilter(key);
         SyncFilterChips();
+        SyncAdvancedFilterControls();
         if (string.Equals(key, "settings", StringComparison.Ordinal))
         {
             RefreshSettingsInputs();
@@ -366,7 +368,7 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    /// <summary>「所有项目」页内的筛选条：状态/归档/收藏筛选（原来在侧边栏）。</summary>
+    /// <summary>「所有项目」页内的状态筛选；收藏是独立、可叠加的条件。</summary>
     private void ListFilter_Checked(object sender, RoutedEventArgs e)
     {
         if (_syncingFilterChips || sender is not FrameworkElement { Tag: string key })
@@ -403,7 +405,7 @@ public sealed partial class MainWindow : Window
     private IReadOnlyList<RadioButton> FilterChips() =>
     [
         ListFilterAll, ListFilterNotStarted, ListFilterActive, ListFilterWaiting,
-        ListFilterCompleted, ListFilterArchived, ListFilterFavorite
+        ListFilterCompleted, ListFilterArchived
     ];
 
     private void SearchBox_TextChanged(object sender, TextChangedEventArgs e)
@@ -456,6 +458,7 @@ public sealed partial class MainWindow : Window
                 .FirstOrDefault(item => ViewModel.FilterUnclassified
                     ? Equals(item.Tag, "__unclassified__")
                     : Equals(item.Tag, ViewModel.SimulationTypeFilter)) ?? SimulationTypeFilterCombo.Items[0];
+            if (FavoriteOnlyButton is not null) FavoriteOnlyButton.IsChecked = ViewModel.FavoriteOnly;
             UpdateAdvancedFilterButtons();
         }
         finally
@@ -526,16 +529,31 @@ public sealed partial class MainWindow : Window
 
     private void ClearAdvancedFilters_Click(object sender, RoutedEventArgs e)
     {
+        ViewModel.SetFilter("all");
         ViewModel.ClearAdvancedFilters();
+        SearchBox.Text = string.Empty;
+        SyncFilterChips();
         SyncAdvancedFilterControls();
+        ClearAllSelections();
+    }
+
+    private void ProjectListEmptyAction_Click(object sender, RoutedEventArgs e)
+    {
+        if (ViewModel.TotalProjectCount == 0) NewProject_Click(sender, e);
+        else ClearAdvancedFilters_Click(sender, e);
+    }
+
+    private void FavoriteOnly_Click(object sender, RoutedEventArgs e)
+    {
+        ViewModel.SetFavoriteOnly(FavoriteOnlyButton.IsChecked == true);
         ClearAllSelections();
     }
 
     private void UpdateAdvancedFilterButtons()
     {
         if (TagFilterButton is null || SoftwareFilterButton is null) return;
-        TagFilterButton.Content = ViewModel.SelectedTagFilters.Count == 0 ? "标签：全部" : $"标签：{ViewModel.SelectedTagFilters.Count}";
-        SoftwareFilterButton.Content = ViewModel.SelectedSoftwareFilters.Count == 0 ? "软件：全部" : $"软件：{ViewModel.SelectedSoftwareFilters.Count}";
+        TagFilterButton.Content = ViewModel.SelectedTagFilters.Count == 0 ? "全部标签  ▾" : $"已选 {ViewModel.SelectedTagFilters.Count} 个标签  ▾";
+        SoftwareFilterButton.Content = ViewModel.SelectedSoftwareFilters.Count == 0 ? "全部软件  ▾" : $"已选 {ViewModel.SelectedSoftwareFilters.Count} 个软件  ▾";
     }
 
     private async void RefreshRecycleBin_Click(object sender, RoutedEventArgs e)
@@ -2284,6 +2302,7 @@ public sealed partial class MainWindow : Window
             _pendingListFilter = null;
             ViewModel.SetFilter(applied);
             SyncFilterChips();
+            SyncAdvancedFilterControls();
             return;
         }
 
@@ -2298,6 +2317,7 @@ public sealed partial class MainWindow : Window
         // 已经在目标导航项上时不会触发 SelectionChanged，这里显式应用一次；重复应用是幂等的。
         ViewModel.SetFilter(applied);
         SyncFilterChips();
+        SyncAdvancedFilterControls();
         ClearAllSelections();
     }
 
@@ -2390,6 +2410,8 @@ public sealed partial class MainWindow : Window
         var name = new TextBox { Header = "显示名称 *", Text = item?.Name ?? string.Empty, PlaceholderText = "例如：ANSYS Mechanical" };
         var panel = new StackPanel { Width = 480, Spacing = 10 };
         panel.Children.Add(name);
+        if (item is not null)
+            panel.Children.Add(new TextBlock { Text = "重命名会同步所有已使用该软件的项目及项目档案。", FontSize = 12, Foreground = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 104, 119, 146)), TextWrapping = TextWrapping.Wrap });
         var dialog = CreateDialog(item is null ? "添加软件标签" : "编辑软件标签", panel, item is null ? "创建" : "保存");
         dialog.PrimaryButtonClick += (_, args2) =>
         {
@@ -2410,7 +2432,7 @@ public sealed partial class MainWindow : Window
             else
             {
                 await ViewModel.UpdateSoftwareAsync(item, name.Text);
-                ShowSuccess("软件已保存", string.Empty);
+                ShowSuccess("软件已保存", ViewModel.StatusMessage);
             }
         }
         catch (Exception ex)

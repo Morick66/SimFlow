@@ -63,7 +63,7 @@ public sealed class ProjectLifecycleTests : IAsyncLifetime
         _repository = new ProjectRepository(database);
         var metadata = new ProjectMetadataStore(NullLogger<ProjectMetadataStore>.Instance);
         var storage = new StorageLocationService(_configuration);
-        _projects = new ProjectService(_repository, metadata, storage, NullLogger<ProjectService>.Instance);
+        _projects = new ProjectService(_repository, metadata, storage, _configuration, NullLogger<ProjectService>.Instance);
         _recovery = new ProjectRecoveryService(_repository, metadata, storage, NullLogger<ProjectRecoveryService>.Instance);
         _scanner = new ProjectScannerService(_repository, metadata, storage, NullLogger<ProjectScannerService>.Instance);
         _migration = new ProjectMigrationService(_repository, metadata, storage, _configuration,
@@ -1112,6 +1112,31 @@ public sealed class ProjectLifecycleTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Software_RenameUpdatesConfiguredCandidateProjectsAndMetadata()
+    {
+        var first = await _projects.CreateAsync(new CreateProjectRequest { Name = "软件整理A", Software = ["Adams"] });
+        var second = await _projects.CreateAsync(new CreateProjectRequest { Name = "软件整理B", Software = ["Adams", "Adams 新版"] });
+
+        var changed = await _projects.RenameSoftwareAsync("Adams", "Adams 新版");
+        Assert.Equal(2, changed);
+        Assert.Contains(_configuration.Current.Software, item => item.Name == "Adams 新版");
+        Assert.DoesNotContain(_configuration.Current.Software, item => item.Name == "Adams");
+
+        foreach (var project in new[] { first, second })
+        {
+            var updated = await _repository.GetByCodeAsync(project.ProjectCode);
+            Assert.NotNull(updated);
+            Assert.Equal(["Adams 新版"], updated!.Software);
+            var path = Path.Combine(_configuration.Current.LocalWorkRoot, project.ProjectCode, "project.json");
+            var json = JsonNode.Parse(await File.ReadAllTextAsync(path))!.AsObject();
+            Assert.Equal("Adams 新版", Assert.Single(json["software"]!.AsArray())!.GetValue<string>());
+        }
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => _projects.RenameSoftwareAsync("Adams 新版", "COMSOL"));
+        Assert.Contains(_configuration.Current.Software, item => item.Name == "Adams 新版");
+    }
+
+    [Fact]
     public async Task Configuration_LegacySoftwarePathsLoadAsNameOnlyLabels()
     {
         // 升级时读取旧配置，不要求用户重新填写软件名，也不恢复已移除的启动能力。
@@ -1267,6 +1292,7 @@ public sealed class ProjectLifecycleTests : IAsyncLifetime
             _repository,
             failingStore,
             new StorageLocationService(_configuration),
+            _configuration,
             NullLogger<ProjectService>.Instance);
 
         await Assert.ThrowsAsync<IOException>(() =>

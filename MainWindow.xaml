@@ -202,15 +202,6 @@
                      筛选改为“所有项目”页内的筛选条（见 ProjectListPanel）；归档仍作为存储状态保留。 -->
                 <NavigationViewItem Content="首页" Tag="home" IsSelected="True"><NavigationViewItem.Icon><FontIcon Glyph="&#xE80F;" /></NavigationViewItem.Icon></NavigationViewItem>
                 <NavigationViewItem Content="所有项目" Tag="all"><NavigationViewItem.Icon><FontIcon Glyph="&#xE8B7;" /></NavigationViewItem.Icon></NavigationViewItem>
-                <NavigationViewItem Tag="favorite">
-                    <NavigationViewItem.Icon><FontIcon Glyph="&#xE735;" /></NavigationViewItem.Icon>
-                    <NavigationViewItem.Content>
-                        <Grid ColumnSpacing="8"><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-                            <TextBlock Text="收藏" VerticalAlignment="Center" />
-                            <Border Grid.Column="1" Background="{ThemeResource SimFlowSurfaceSubtleBrush}" CornerRadius="9" Padding="7,1"><TextBlock Text="{x:Bind ViewModel.FavoriteProjectCount, Mode=OneWay}" FontSize="11" Foreground="{ThemeResource SimFlowMutedBrush}" /></Border>
-                        </Grid>
-                    </NavigationViewItem.Content>
-                </NavigationViewItem>
                 <NavigationViewItem Tag="recyclebin">
                     <NavigationViewItem.Icon><FontIcon Glyph="&#xE74D;" /></NavigationViewItem.Icon>
                     <NavigationViewItem.Content>
@@ -397,26 +388,64 @@
                             <!-- 主题筛选页：完整列表 -->
                             <Border x:Name="ProjectListPanel" Style="{StaticResource CardBorderStyle}" Padding="0">
                                 <Grid>
-                                    <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
-                                    <!-- 筛选胶囊随可用宽度换行，保留原有单选组与事件。 -->
-                                    <VariableSizedWrapGrid Grid.Row="0" Orientation="Horizontal" ItemWidth="100" ItemHeight="44" Margin="16,14,8,4">
-                                        <RadioButton x:Name="ListFilterAll" Content="全部" Tag="all" GroupName="ListFilter" Style="{StaticResource FilterChipRadioStyle}" Checked="ListFilter_Checked" />
-                                        <RadioButton x:Name="ListFilterNotStarted" Content="未开始" Tag="notstarted" GroupName="ListFilter" Style="{StaticResource FilterChipRadioStyle}" Checked="ListFilter_Checked" />
-                                        <RadioButton x:Name="ListFilterActive" Content="进行中" Tag="active" GroupName="ListFilter" Style="{StaticResource FilterChipRadioStyle}" Checked="ListFilter_Checked" />
-                                        <RadioButton x:Name="ListFilterWaiting" Content="等待中" Tag="waiting" GroupName="ListFilter" Style="{StaticResource FilterChipRadioStyle}" Checked="ListFilter_Checked" />
-                                        <RadioButton x:Name="ListFilterCompleted" Content="已完成" Tag="completed" GroupName="ListFilter" Style="{StaticResource FilterChipRadioStyle}" Checked="ListFilter_Checked" />
-                                        <RadioButton x:Name="ListFilterArchived" Content="已归档" Tag="archived" GroupName="ListFilter" Style="{StaticResource FilterChipRadioStyle}" Checked="ListFilter_Checked" />
-                                        <RadioButton x:Name="ListFilterFavorite" Content="收藏" Tag="favorite" GroupName="ListFilter" Style="{StaticResource FilterChipRadioStyle}" Checked="ListFilter_Checked" />
-                                    </VariableSizedWrapGrid>
-                                    <!-- 多维筛选：不同维度取交集；标签/软件在各自维度内匹配任一选中项。 -->
-                                    <VariableSizedWrapGrid Grid.Row="1" Orientation="Horizontal" ItemWidth="166" ItemHeight="42" Margin="16,2,10,10">
-                                        <ComboBox x:Name="RequesterFilterCombo" MinWidth="150" PlaceholderText="全部需求人" SelectionChanged="RequesterFilter_SelectionChanged" Margin="0,0,8,6" />
-                                        <ComboBox x:Name="SimulationTypeFilterCombo" MinWidth="150" PlaceholderText="全部仿真类型" SelectionChanged="SimulationTypeFilter_SelectionChanged" Margin="0,0,8,6" />
-                                        <Button x:Name="TagFilterButton" Content="标签：全部" Click="TagFilter_Click" Style="{StaticResource SecondaryButtonStyle}" Margin="0,0,8,6" />
-                                        <Button x:Name="SoftwareFilterButton" Content="软件：全部" Click="SoftwareFilter_Click" Style="{StaticResource SecondaryButtonStyle}" Margin="0,0,8,6" />
-                                        <Button x:Name="ClearAdvancedFiltersButton" Content="清除筛选" Click="ClearAdvancedFilters_Click" Style="{StaticResource SecondaryButtonStyle}" Margin="0,0,8,6" IsEnabled="{x:Bind ViewModel.HasAdvancedFilters, Mode=OneWay}" />
-                                    </VariableSizedWrapGrid>
-                                    <Grid Grid.Row="2">
+                                    <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+                                    <!-- 状态和项目属性分层：收藏是可叠加条件，不再和业务状态互斥。 -->
+                                    <Border Grid.Row="0" Margin="16,14,16,12" Padding="16,14" CornerRadius="12"
+                                            Background="{ThemeResource SimFlowSurfaceSubtleBrush}">
+                                        <StackPanel Spacing="8">
+                                            <Grid ColumnSpacing="10">
+                                                <Grid.ColumnDefinitions><ColumnDefinition Width="32" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                                <Border Width="32" Height="32" CornerRadius="9" Background="{ThemeResource SimFlowSelectedBrush}">
+                                                    <FontIcon Glyph="&#xE71C;" FontSize="16" Foreground="{ThemeResource SimFlowPrimaryBrush}" />
+                                                </Border>
+                                                <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+                                                    <TextBlock Text="筛选项目" FontSize="14" FontWeight="SemiBold" Foreground="{ThemeResource SimFlowTextPrimaryBrush}" />
+                                                    <TextBlock Text="按状态和项目属性组合查找" FontSize="11" Foreground="{ThemeResource SimFlowMutedBrush}" />
+                                                </StackPanel>
+                                                <Button Grid.Column="2" x:Name="ClearAdvancedFiltersButton" Content="重置筛选" Click="ClearAdvancedFilters_Click"
+                                                        Style="{StaticResource SecondaryButtonStyle}" Padding="12,6" MinHeight="32" VerticalAlignment="Center"
+                                                        AutomationProperties.Name="重置项目筛选" />
+                                            </Grid>
+                                            <TextBlock Text="项目状态" FontSize="12" FontWeight="SemiBold" Foreground="{ThemeResource SimFlowTextSecondaryBrush}" Margin="0,6,0,0" />
+                                            <VariableSizedWrapGrid Orientation="Horizontal" ItemWidth="100" ItemHeight="42">
+                                                <RadioButton x:Name="ListFilterAll" Content="全部" Tag="all" GroupName="ListFilter" Style="{StaticResource FilterChipRadioStyle}" Checked="ListFilter_Checked" />
+                                                <RadioButton x:Name="ListFilterNotStarted" Content="未开始" Tag="notstarted" GroupName="ListFilter" Style="{StaticResource FilterChipRadioStyle}" Checked="ListFilter_Checked" />
+                                                <RadioButton x:Name="ListFilterActive" Content="进行中" Tag="active" GroupName="ListFilter" Style="{StaticResource FilterChipRadioStyle}" Checked="ListFilter_Checked" />
+                                                <RadioButton x:Name="ListFilterWaiting" Content="等待中" Tag="waiting" GroupName="ListFilter" Style="{StaticResource FilterChipRadioStyle}" Checked="ListFilter_Checked" />
+                                                <RadioButton x:Name="ListFilterCompleted" Content="已完成" Tag="completed" GroupName="ListFilter" Style="{StaticResource FilterChipRadioStyle}" Checked="ListFilter_Checked" />
+                                                <RadioButton x:Name="ListFilterArchived" Content="已归档" Tag="archived" GroupName="ListFilter" Style="{StaticResource FilterChipRadioStyle}" Checked="ListFilter_Checked" />
+                                            </VariableSizedWrapGrid>
+                                            <Border Height="1" Background="{ThemeResource SimFlowBorderBrush}" Margin="0,0,0,2" />
+                                            <VariableSizedWrapGrid Orientation="Horizontal" ItemWidth="176" ItemHeight="68">
+                                                <StackPanel Spacing="5">
+                                                    <TextBlock Text="需求人" FontSize="12" Foreground="{ThemeResource SimFlowTextSecondaryBrush}" />
+                                                    <ComboBox x:Name="RequesterFilterCombo" Width="164" MinHeight="36" SelectionChanged="RequesterFilter_SelectionChanged" AutomationProperties.Name="按需求人筛选" />
+                                                </StackPanel>
+                                                <StackPanel Spacing="5">
+                                                    <TextBlock Text="仿真类型" FontSize="12" Foreground="{ThemeResource SimFlowTextSecondaryBrush}" />
+                                                    <ComboBox x:Name="SimulationTypeFilterCombo" Width="164" MinHeight="36" SelectionChanged="SimulationTypeFilter_SelectionChanged" AutomationProperties.Name="按仿真类型筛选" />
+                                                </StackPanel>
+                                                <StackPanel Spacing="5">
+                                                    <TextBlock Text="项目标签" FontSize="12" Foreground="{ThemeResource SimFlowTextSecondaryBrush}" />
+                                                    <Button x:Name="TagFilterButton" Content="全部标签  ▾" Width="164" MinHeight="36" Click="TagFilter_Click" HorizontalContentAlignment="Left" AutomationProperties.Name="按项目标签筛选" />
+                                                </StackPanel>
+                                                <StackPanel Spacing="5">
+                                                    <TextBlock Text="使用软件" FontSize="12" Foreground="{ThemeResource SimFlowTextSecondaryBrush}" />
+                                                    <Button x:Name="SoftwareFilterButton" Content="全部软件  ▾" Width="164" MinHeight="36" Click="SoftwareFilter_Click" HorizontalContentAlignment="Left" AutomationProperties.Name="按使用软件筛选" />
+                                                </StackPanel>
+                                                <StackPanel Spacing="5">
+                                                    <TextBlock Text="快捷条件" FontSize="12" Foreground="{ThemeResource SimFlowTextSecondaryBrush}" />
+                                                    <ToggleButton x:Name="FavoriteOnlyButton" Width="164" MinHeight="36" Click="FavoriteOnly_Click" AutomationProperties.Name="仅看收藏项目">
+                                                        <StackPanel Orientation="Horizontal" Spacing="7">
+                                                            <FontIcon Glyph="&#xE735;" FontSize="13" />
+                                                            <TextBlock Text="仅看收藏" />
+                                                        </StackPanel>
+                                                    </ToggleButton>
+                                                </StackPanel>
+                                            </VariableSizedWrapGrid>
+                                        </StackPanel>
+                                    </Border>
+                                    <Grid Grid.Row="1">
                                         <ListView x:Name="ProjectList" ItemsSource="{x:Bind ViewModel.Projects, Mode=OneWay}" SelectedItem="{x:Bind ViewModel.SelectedProject, Mode=OneWay}" SelectionMode="Single" IsItemClickEnabled="True" ItemClick="ProjectList_ItemClick" ItemTemplate="{StaticResource ProjectRowTemplate}">
                                             <ListView.ItemContainerStyle>
                                                 <Style TargetType="ListViewItem"><Setter Property="HorizontalContentAlignment" Value="Stretch" /><Setter Property="Padding" Value="0" /><Setter Property="MinHeight" Value="88" /><Setter Property="CornerRadius" Value="8" /><Setter Property="Margin" Value="5,2" /></Style>
@@ -426,7 +455,7 @@
                                             <FontIcon Glyph="&#xE8B7;" FontSize="40" Foreground="{ThemeResource SimFlowMutedBrush}" HorizontalAlignment="Center" />
                                             <TextBlock Text="还没有符合条件的项目" FontSize="16" FontWeight="SemiBold" Foreground="{ThemeResource SimFlowTextPrimaryBrush}" HorizontalAlignment="Center" />
                                             <TextBlock Text="新建项目或调整筛选条件后，项目会显示在这里。" FontSize="13" Foreground="{ThemeResource SimFlowMutedBrush}" HorizontalAlignment="Center" />
-                                            <Button Content="新建第一个项目" Style="{StaticResource PrimaryButtonStyle}" Click="NewProject_Click" HorizontalAlignment="Center" />
+                                            <Button x:Name="ProjectListEmptyAction" Content="重置筛选" Style="{StaticResource PrimaryButtonStyle}" Click="ProjectListEmptyAction_Click" HorizontalAlignment="Center" />
                                         </StackPanel>
                                     </Grid>
                                 </Grid>

@@ -24,6 +24,7 @@ public sealed partial class MainViewModel(
     private string? _requesterFilter;
     private SimulationType? _simulationTypeFilter;
     private bool _filterUnclassified;
+    private bool _favoriteOnly;
 
     public ObservableCollection<ProjectCardViewModel> Projects { get; } = [];
     public ObservableCollection<ProjectCardViewModel> NotStartedProjects { get; } = [];
@@ -47,9 +48,10 @@ public sealed partial class MainViewModel(
     public string? RequesterFilter => _requesterFilter;
     public SimulationType? SimulationTypeFilter => _simulationTypeFilter;
     public bool FilterUnclassified => _filterUnclassified;
+    public bool FavoriteOnly => _favoriteOnly;
     public bool HasAdvancedFilters => AdvancedFilterCount > 0;
     public int AdvancedFilterCount => (_requesterFilter is null ? 0 : 1) + (_simulationTypeFilter is null && !_filterUnclassified ? 0 : 1)
-        + (_tagFilters.Count > 0 ? 1 : 0) + (_softwareFilters.Count > 0 ? 1 : 0);
+        + (_tagFilters.Count > 0 ? 1 : 0) + (_softwareFilters.Count > 0 ? 1 : 0) + (_favoriteOnly ? 1 : 0);
     public int RecycleBinCount => RecoveryItems.Count;
     public bool HasRecoveryItems => RecoveryItems.Count > 0;
 
@@ -178,6 +180,14 @@ public sealed partial class MainViewModel(
 
     public void SetFilter(string key)
     {
+        if (string.Equals(key, "favorite", StringComparison.Ordinal))
+        {
+            _favoriteOnly = true;
+            key = "all";
+            OnPropertyChanged(nameof(FavoriteOnly));
+            OnPropertyChanged(nameof(AdvancedFilterCount));
+            OnPropertyChanged(nameof(HasAdvancedFilters));
+        }
         FilterKey = key;
         IsHome = string.Equals(key, "home", StringComparison.Ordinal);
         IsSettings = string.Equals(key, "settings", StringComparison.Ordinal);
@@ -192,7 +202,6 @@ public sealed partial class MainViewModel(
             "active" => "进行中",
             "waiting" => "等待中",
             "completed" => "已完成",
-            "favorite" => "收藏项目",
             "archived" => "已归档",
             "statistics" => "统计分析",
             "recyclebin" => "回收站",
@@ -251,6 +260,13 @@ public sealed partial class MainViewModel(
         NotifyAdvancedFilterChanged();
     }
 
+    public void SetFavoriteOnly(bool favoriteOnly)
+    {
+        if (_favoriteOnly == favoriteOnly) return;
+        _favoriteOnly = favoriteOnly;
+        NotifyAdvancedFilterChanged();
+    }
+
     public void ClearAdvancedFilters()
     {
         _requesterFilter = null;
@@ -258,6 +274,7 @@ public sealed partial class MainViewModel(
         _filterUnclassified = false;
         _tagFilters.Clear();
         _softwareFilters.Clear();
+        _favoriteOnly = false;
         NotifyAdvancedFilterChanged();
     }
 
@@ -268,6 +285,7 @@ public sealed partial class MainViewModel(
         OnPropertyChanged(nameof(FilterUnclassified));
         OnPropertyChanged(nameof(SelectedTagFilters));
         OnPropertyChanged(nameof(SelectedSoftwareFilters));
+        OnPropertyChanged(nameof(FavoriteOnly));
         OnPropertyChanged(nameof(AdvancedFilterCount));
         OnPropertyChanged(nameof(HasAdvancedFilters));
         ApplyFilter();
@@ -432,29 +450,14 @@ public sealed partial class MainViewModel(
 
     public async Task UpdateSoftwareAsync(SoftwareConfiguration item, string name, CancellationToken cancellationToken = default)
     {
-        var trimmed = name.Trim();
-        if (trimmed.Length == 0)
-        {
-            throw new InvalidOperationException("软件名称不能为空。");
-        }
-
-        var current = configuration.Current;
-        var index = current.Software.IndexOf(item);
-        if (index < 0)
-        {
+        if (!configuration.Current.Software.Contains(item))
             throw new InvalidOperationException("软件候选已变更，请刷新后重试。");
-        }
-
-        if (current.Software.Where((_, candidateIndex) => candidateIndex != index)
-            .Any(candidate => string.Equals(candidate.Name, trimmed, StringComparison.OrdinalIgnoreCase)))
-        {
-            throw new InvalidOperationException($"软件「{trimmed}」已存在。");
-        }
-
-        var next = CopyConfiguration(current);
-        next.Software[index].Name = trimmed;
-        await configuration.SaveAsync(next, cancellationToken);
+        var oldName = item.Name;
+        var renamedCount = await projectService.RenameSoftwareAsync(oldName, name, cancellationToken);
+        if (_softwareFilters.Remove(oldName)) _softwareFilters.Add(name.Trim());
+        StatusMessage = $"软件标签已更新，同步到 {renamedCount} 个项目";
         RefreshSoftwareList();
+        await RefreshAsync(cancellationToken);
     }
 
     public async Task RemoveSoftwareAsync(SoftwareConfiguration item, CancellationToken cancellationToken = default)
@@ -606,10 +609,10 @@ public sealed partial class MainViewModel(
             "active" => query.Where(project => project.WorkflowStatus == WorkflowStatus.Active && project.StorageStatus == StorageStatus.Working),
             "waiting" => query.Where(project => project.WorkflowStatus == WorkflowStatus.Waiting && project.StorageStatus == StorageStatus.Working),
             "completed" => query.Where(project => project.WorkflowStatus == WorkflowStatus.Completed && project.StorageStatus == StorageStatus.Working),
-            "favorite" => query.Where(project => project.IsFavorite),
             "archived" => query.Where(project => project.StorageStatus == StorageStatus.Archived),
             _ => query
         };
+        if (_favoriteOnly) query = query.Where(project => project.IsFavorite);
         if (_requesterFilter is not null)
         {
             query = _requesterFilter.Length == 0

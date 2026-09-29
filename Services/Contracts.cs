@@ -34,6 +34,8 @@ public interface IProjectRepository
     Task<IReadOnlyList<WaitReasonRecord>> GetWaitReasonsAsync(CancellationToken cancellationToken = default);
     /// <summary>重命名或合并标签，返回受影响的 ProjectId 列表（供上层同步项目档案）。</summary>
     Task<IReadOnlyList<long>> RenameTagAsync(string oldName, string newName, CancellationToken cancellationToken = default);
+    /// <summary>重命名软件标签并合并同名项目关联，返回需要同步档案的项目 Id。</summary>
+    Task<IReadOnlyList<long>> RenameSoftwareAsync(string oldName, string newName, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<long>> MergeTagsAsync(string sourceName, string targetName, CancellationToken cancellationToken = default);
     Task DeleteTagAsync(string name, CancellationToken cancellationToken = default);
     /// <summary>删除项目记录；依赖外键级联清理版本、活动、状态历史、关联标签/软件与迁移记录。</summary>
@@ -69,6 +71,7 @@ public interface IProjectService
     Task<IReadOnlyList<TagSummaryRecord>> GetTagSummaryAsync(CancellationToken cancellationToken = default);
     Task<IReadOnlyList<WaitReasonRecord>> GetWaitReasonsAsync(CancellationToken cancellationToken = default);
     Task RenameTagAsync(string oldName, string newName, CancellationToken cancellationToken = default);
+    Task<int> RenameSoftwareAsync(string oldName, string newName, CancellationToken cancellationToken = default);
     Task MergeTagsAsync(string sourceName, string targetName, CancellationToken cancellationToken = default);
     Task DeleteUnusedTagAsync(string name, CancellationToken cancellationToken = default);
     Task<ProjectRecord> UpdateNotesAsync(ProjectRecord project, string notes, CancellationToken cancellationToken = default);

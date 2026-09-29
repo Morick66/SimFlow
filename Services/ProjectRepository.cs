@@ -472,6 +472,80 @@ public sealed class ProjectRepository(DatabaseService database) : IProjectReposi
         return affected;
     }
 
+    public async Task<IReadOnlyList<long>> RenameSoftwareAsync(string oldName, string newName, CancellationToken cancellationToken = default)
+    {
+        await using var connection = await database.OpenConnectionAsync(cancellationToken);
+        await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken);
+        var oldId = await FindSoftwareIdAsync(connection, transaction, oldName, cancellationToken);
+        if (oldId is null)
+        {
+            await transaction.CommitAsync(cancellationToken);
+            return [];
+        }
+
+        var newId = await FindSoftwareIdAsync(connection, transaction, newName, cancellationToken);
+        var affected = new List<long>();
+        await using (var query = connection.CreateCommand())
+        {
+            query.Transaction = transaction;
+            query.CommandText = "SELECT ProjectId FROM ProjectSoftware WHERE SoftwareId=$id;";
+            query.Parameters.AddWithValue("$id", oldId.Value);
+            await using var reader = await query.ExecuteReaderAsync(cancellationToken);
+            while (await reader.ReadAsync(cancellationToken)) affected.Add(reader.GetInt64(0));
+        }
+
+        if (newId is null || newId == oldId)
+        {
+            await using var rename = connection.CreateCommand();
+            rename.Transaction = transaction;
+            rename.CommandText = "UPDATE Software SET Name=$name WHERE Id=$id;";
+            rename.Parameters.AddWithValue("$name", newName);
+            rename.Parameters.AddWithValue("$id", oldId.Value);
+            await rename.ExecuteNonQueryAsync(cancellationToken);
+        }
+        else
+        {
+            // 项目可能已经同时选过旧、新名称；合并关联时保留目标，不能产生重复标签。
+            await using (var merge = connection.CreateCommand())
+            {
+                merge.Transaction = transaction;
+                merge.CommandText = "INSERT OR IGNORE INTO ProjectSoftware(ProjectId,SoftwareId) SELECT ProjectId,$target FROM ProjectSoftware WHERE SoftwareId=$source;";
+                merge.Parameters.AddWithValue("$target", newId.Value);
+                merge.Parameters.AddWithValue("$source", oldId.Value);
+                await merge.ExecuteNonQueryAsync(cancellationToken);
+            }
+            await using var drop = connection.CreateCommand();
+            drop.Transaction = transaction;
+            drop.CommandText = "DELETE FROM Software WHERE Id=$source;";
+            drop.Parameters.AddWithValue("$source", oldId.Value);
+            await drop.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        var now = DateTimeOffset.Now;
+        foreach (var projectId in affected)
+        {
+            await using (var update = connection.CreateCommand())
+            {
+                update.Transaction = transaction;
+                update.CommandText = "UPDATE Projects SET UpdatedAtUtc=$now, MetadataSyncState='Pending' WHERE Id=$id;";
+                update.Parameters.AddWithValue("$now", now.ToUniversalTime().ToString("O"));
+                update.Parameters.AddWithValue("$id", projectId);
+                await update.ExecuteNonQueryAsync(cancellationToken);
+            }
+            await InsertActivityAsync(connection, transaction, new ProjectActivityRecord
+            {
+                ProjectId = projectId,
+                ActivityType = ActivityTypes.ProjectUpdated,
+                Description = $"软件标签重命名：{oldName} → {newName}",
+                CreatedAt = now
+            }, cancellationToken);
+            await QueueMetadataAsync(connection, transaction, projectId, cancellationToken);
+        }
+
+        await transaction.CommitAsync(cancellationToken);
+        return affected;
+    }
+
     public async Task<IReadOnlyList<long>> MergeTagsAsync(string sourceName, string targetName, CancellationToken cancellationToken = default)
     {
         await using var connection = await database.OpenConnectionAsync(cancellationToken);
@@ -522,6 +596,15 @@ public sealed class ProjectRepository(DatabaseService database) : IProjectReposi
         await using var command = connection.CreateCommand();
         command.Transaction = transaction;
         command.CommandText = "SELECT Id FROM Tags WHERE Name=$name COLLATE NOCASE LIMIT 1;";
+        command.Parameters.AddWithValue("$name", name);
+        return await command.ExecuteScalarAsync(cancellationToken) is long id ? id : null;
+    }
+
+    private static async Task<long?> FindSoftwareIdAsync(SqliteConnection connection, SqliteTransaction transaction, string name, CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = "SELECT Id FROM Software WHERE Name=$name COLLATE NOCASE LIMIT 1;";
         command.Parameters.AddWithValue("$name", name);
         return await command.ExecuteScalarAsync(cancellationToken) is long id ? id : null;
     }

@@ -132,6 +132,7 @@ public sealed class ProjectService(
     IProjectRepository repository,
     IProjectMetadataStore metadataStore,
     IStorageLocationService storage,
+    IConfigurationService configuration,
     ILogger<ProjectService> logger) : IProjectService
 {
     private static readonly string[] SupportedCoverExtensions =
@@ -509,6 +510,69 @@ public sealed class ProjectService(
 
         var affected = await repository.RenameTagAsync(oldName, newName, cancellationToken);
         await RebuildTaggedProjectsAsync(affected, $"标签重命名：{oldName} → {newName}", cancellationToken);
+    }
+
+    public async Task<int> RenameSoftwareAsync(string oldName, string newName, CancellationToken cancellationToken = default)
+    {
+        oldName = oldName.Trim();
+        newName = newName.Trim();
+        if (newName.Length == 0) throw new InvalidOperationException("软件名称不能为空。");
+        if (string.Equals(oldName, newName, StringComparison.Ordinal)) return 0;
+
+        var previous = configuration.Current;
+        var index = previous.Software.FindIndex(item => string.Equals(item.Name, oldName, StringComparison.OrdinalIgnoreCase));
+        if (index < 0) throw new InvalidOperationException("软件候选已变更，请刷新后重试。");
+        if (previous.Software.Where((_, candidateIndex) => candidateIndex != index)
+            .Any(item => string.Equals(item.Name, newName, StringComparison.OrdinalIgnoreCase)))
+            throw new InvalidOperationException($"软件「{newName}」已存在。");
+
+        // 先持久化配置；数据库批量替换在单一事务中完成，失败时恢复原配置。
+        var next = new AppConfiguration
+        {
+            SchemaVersion = previous.SchemaVersion,
+            LocalWorkRoot = previous.LocalWorkRoot,
+            WorkstationWorkRoot = previous.WorkstationWorkRoot,
+            WorkstationArchiveRoot = previous.WorkstationArchiveRoot,
+            ProjectPlaceholderImage = previous.ProjectPlaceholderImage,
+            SimulationReportTemplatePath = previous.SimulationReportTemplatePath,
+            DeleteSourceAfterArchive = previous.DeleteSourceAfterArchive,
+            CheckWorkstationOnStartup = previous.CheckWorkstationOnStartup,
+            Software = previous.Software.Select(item => new SoftwareConfiguration { Name = item.Name }).ToList()
+        };
+        next.Software[index].Name = newName;
+        await configuration.SaveAsync(next, cancellationToken);
+
+        IReadOnlyList<long> affected;
+        try
+        {
+            affected = await repository.RenameSoftwareAsync(oldName, newName, cancellationToken);
+        }
+        catch (Exception renameError)
+        {
+            try { await configuration.SaveAsync(previous, CancellationToken.None); }
+            catch (Exception rollbackError)
+            {
+                throw new AggregateException("软件关联更新失败，原配置也未能恢复，请先不要继续编辑项目。", renameError, rollbackError);
+            }
+            throw;
+        }
+
+        // 事务已提交；离线或只读目录写入失败不回退数据库，待同步队列会在下次启动重试。
+        foreach (var projectId in affected)
+        {
+            try
+            {
+                var project = await repository.GetByIdAsync(projectId, CancellationToken.None);
+                if (project is not null)
+                    await SyncMetadataAsync(project, storage.ResolveProjectPath(project), CancellationToken.None);
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "软件标签重命名后档案同步失败（保留同步队列）：{ProjectId}", projectId);
+            }
+        }
+
+        return affected.Count;
     }
 
     public async Task MergeTagsAsync(string sourceName, string targetName, CancellationToken cancellationToken = default)

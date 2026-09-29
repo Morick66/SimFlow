@@ -1137,6 +1137,24 @@ public sealed class ProjectLifecycleTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Software_MergeRepairsLegacyNameLeftInProjectsAfterConfigurationOnlyRename()
+    {
+        var project = await _projects.CreateAsync(new CreateProjectRequest { Name = "旧名称项目", Software = ["Adams"] });
+        // 模拟旧版本的缺陷：配置改了名，项目数据库与 project.json 仍是旧名称。
+        _configuration.Current.Software.Single(item => item.Name == "Adams").Name = "Adams Motion";
+        await _configuration.SaveAsync(_configuration.Current);
+
+        Assert.Equal(1, await _projects.MergeUnconfiguredSoftwareAsync("Adams", "Adams Motion"));
+        var updated = await _repository.GetByCodeAsync(project.ProjectCode);
+        Assert.Equal(["Adams Motion"], updated!.Software);
+        var path = Path.Combine(_configuration.Current.LocalWorkRoot, project.ProjectCode, "project.json");
+        var json = JsonNode.Parse(await File.ReadAllTextAsync(path))!.AsObject();
+        Assert.Equal("Adams Motion", Assert.Single(json["software"]!.AsArray())!.GetValue<string>());
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            _projects.MergeUnconfiguredSoftwareAsync("Adams Motion", "COMSOL"));
+    }
+
+    [Fact]
     public async Task Configuration_LegacySoftwarePathsLoadAsNameOnlyLabels()
     {
         // 升级时读取旧配置，不要求用户重新填写软件名，也不恢复已移除的启动能力。

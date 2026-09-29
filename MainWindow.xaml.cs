@@ -2455,4 +2455,44 @@ public sealed partial class MainWindow : Window
             ShowError("删除软件失败", ex);
         }
     }
+
+    private async void MergeOldSoftware_Click(object sender, RoutedEventArgs e)
+    {
+        var oldNames = ViewModel.UnconfiguredSoftwareNames;
+        if (oldNames.Count == 0)
+        {
+            ShowSuccess("无需整理", "当前没有仍被项目使用的未配置软件标签。");
+            return;
+        }
+
+        var source = new ComboBox { Header = "项目里的旧名称", Width = 360 };
+        foreach (var oldName in oldNames)
+            source.Items.Add(new ComboBoxItem { Content = $"{oldName}（{ViewModel.SoftwareProjectCount(oldName)} 个项目）", Tag = oldName });
+        source.SelectedIndex = 0;
+        var target = new ComboBox { Header = "合并到现有软件标签", Width = 360 };
+        foreach (var candidate in _configuration.Current.Software)
+            target.Items.Add(new ComboBoxItem { Content = candidate.Name, Tag = candidate.Name });
+        if (target.Items.Count == 0)
+        {
+            ShowWarning("没有目标标签", "请先添加一个软件标签，再整理旧名称。");
+            return;
+        }
+        target.SelectedIndex = 0;
+        var content = new StackPanel { Width = 380, Spacing = 12 };
+        content.Children.Add(new TextBlock { Text = "这会批量更新项目列表、统计及可访问的 project.json；离线项目会在恢复连接后继续同步。", TextWrapping = TextWrapping.Wrap });
+        content.Children.Add(source);
+        content.Children.Add(target);
+        if (await ShowDialogAsync(CreateDialog("合并历史软件标签", content, "合并")) != ContentDialogResult.Primary) return;
+        if (source.SelectedItem is not ComboBoxItem { Tag: string oldNameSelected }
+            || target.SelectedItem is not ComboBoxItem { Tag: string targetName }) return;
+        try
+        {
+            await ViewModel.MergeUnconfiguredSoftwareAsync(oldNameSelected, targetName);
+            ShowSuccess("旧标签已合并", ViewModel.StatusMessage);
+        }
+        catch (Exception ex)
+        {
+            ShowError("合并旧标签失败", ex);
+        }
+    }
 }

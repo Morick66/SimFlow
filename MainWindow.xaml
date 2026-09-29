@@ -596,6 +596,16 @@
                                                 <Button Grid.Column="1" Style="{StaticResource PrimaryButtonStyle}" Content="＋ 添加软件标签" Click="NewSoftware_Click" VerticalAlignment="Center" />
                                             </Grid>
                                             <ListView ItemsSource="{x:Bind ViewModel.SoftwareList, Mode=OneWay}" ItemTemplate="{StaticResource SoftwareLabelRowTemplate}" SelectionMode="None" />
+                                            <Border Style="{StaticResource CardBorderStyle}" Padding="14" CornerRadius="10">
+                                                <Grid ColumnSpacing="12">
+                                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                                    <StackPanel Spacing="4">
+                                                        <TextBlock Text="整理历史软件标签" Style="{StaticResource CardTitleTextStyle}" />
+                                                        <TextBlock Text="旧名称仍留在项目里？明确选择它要合并到哪个现有软件，不会自动猜测。" Style="{StaticResource SecondaryTextStyle}" TextWrapping="Wrap" />
+                                                    </StackPanel>
+                                                    <Button Grid.Column="1" Content="合并旧标签…" Click="MergeOldSoftware_Click" Style="{StaticResource SecondaryButtonStyle}" VerticalAlignment="Center" />
+                                                </Grid>
+                                            </Border>
                                         </StackPanel>
 
                                         <!-- 迁移与归档 -->

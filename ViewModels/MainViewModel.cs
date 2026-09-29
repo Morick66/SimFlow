@@ -65,6 +65,10 @@ public sealed partial class MainViewModel(
         .Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(value => value, StringComparer.CurrentCultureIgnoreCase).ToList();
     public IReadOnlyList<string> SoftwareFilterOptions => _allProjects.SelectMany(project => project.Software)
         .Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(value => value, StringComparer.CurrentCultureIgnoreCase).ToList();
+    public IReadOnlyList<string> UnconfiguredSoftwareNames => SoftwareFilterOptions
+        .Where(name => !configuration.Current.Software.Any(item => string.Equals(item.Name, name, StringComparison.OrdinalIgnoreCase)))
+        .ToList();
+    public int SoftwareProjectCount(string name) => _allProjects.Count(project => project.Software.Contains(name, StringComparer.OrdinalIgnoreCase));
 
     [ObservableProperty]
     public partial ProjectCardViewModel? SelectedProject { get; set; }
@@ -473,6 +477,14 @@ public sealed partial class MainViewModel(
         next.Software.RemoveAt(index);
         await configuration.SaveAsync(next, cancellationToken);
         RefreshSoftwareList();
+    }
+
+    public async Task MergeUnconfiguredSoftwareAsync(string oldName, string targetName, CancellationToken cancellationToken = default)
+    {
+        var changed = await projectService.MergeUnconfiguredSoftwareAsync(oldName, targetName, cancellationToken);
+        if (_softwareFilters.Remove(oldName)) _softwareFilters.Add(targetName);
+        await RefreshAsync(cancellationToken);
+        StatusMessage = $"已将 {changed} 个项目的「{oldName}」合并到「{targetName}」";
     }
 
     /// <summary>

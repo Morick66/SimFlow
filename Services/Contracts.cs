@@ -72,6 +72,7 @@ public interface IProjectService
     Task<IReadOnlyList<WaitReasonRecord>> GetWaitReasonsAsync(CancellationToken cancellationToken = default);
     Task RenameTagAsync(string oldName, string newName, CancellationToken cancellationToken = default);
     Task<int> RenameSoftwareAsync(string oldName, string newName, CancellationToken cancellationToken = default);
+    Task<int> MergeUnconfiguredSoftwareAsync(string oldName, string targetName, CancellationToken cancellationToken = default);
     Task MergeTagsAsync(string sourceName, string targetName, CancellationToken cancellationToken = default);
     Task DeleteUnusedTagAsync(string name, CancellationToken cancellationToken = default);
     Task<ProjectRecord> UpdateNotesAsync(ProjectRecord project, string notes, CancellationToken cancellationToken = default);

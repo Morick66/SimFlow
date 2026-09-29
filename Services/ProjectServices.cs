@@ -557,6 +557,27 @@ public sealed class ProjectService(
             throw;
         }
 
+        await SyncRenamedSoftwareProjectsAsync(affected);
+        return affected.Count;
+    }
+
+    public async Task<int> MergeUnconfiguredSoftwareAsync(string oldName, string targetName, CancellationToken cancellationToken = default)
+    {
+        oldName = oldName.Trim();
+        targetName = targetName.Trim();
+        var candidates = configuration.Current.Software;
+        if (oldName.Length == 0 || candidates.Any(item => string.Equals(item.Name, oldName, StringComparison.OrdinalIgnoreCase)))
+            throw new InvalidOperationException("旧名称必须是未配置、但仍被项目使用的软件标签。");
+        if (!candidates.Any(item => string.Equals(item.Name, targetName, StringComparison.OrdinalIgnoreCase)))
+            throw new InvalidOperationException("目标软件标签已不存在，请刷新后重试。");
+
+        var affected = await repository.RenameSoftwareAsync(oldName, targetName, cancellationToken);
+        await SyncRenamedSoftwareProjectsAsync(affected);
+        return affected.Count;
+    }
+
+    private async Task SyncRenamedSoftwareProjectsAsync(IReadOnlyList<long> affected)
+    {
         // 事务已提交；离线或只读目录写入失败不回退数据库，待同步队列会在下次启动重试。
         foreach (var projectId in affected)
         {
@@ -572,7 +593,6 @@ public sealed class ProjectService(
             }
         }
 
-        return affected.Count;
     }
 
     public async Task MergeTagsAsync(string sourceName, string targetName, CancellationToken cancellationToken = default)
